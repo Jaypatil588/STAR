@@ -8,6 +8,7 @@ def get_ui_html() -> str:
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>STAR Stream UI</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/styles/github-dark.min.css" />
   <style>
     :root {
       --bg: #0b1220;
@@ -86,6 +87,35 @@ def get_ui_html() -> str:
       max-height: 700px;
       overflow: auto;
     }
+    .rendered {
+      margin: 0;
+      padding: 12px;
+      line-height: 1.5;
+      font-size: 14px;
+      max-height: 700px;
+      overflow: auto;
+    }
+    .rendered h2, .rendered h3 {
+      margin: 12px 0 8px;
+      color: #9bd8ff;
+    }
+    .rendered p, .rendered ul, .rendered ol {
+      margin: 8px 0;
+    }
+    .rendered code {
+      background: rgba(12, 19, 34, 0.8);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 2px 5px;
+      font-size: 13px;
+    }
+    .rendered pre code {
+      border: none;
+      padding: 0;
+      background: transparent;
+      font-size: 13px;
+    }
+    .hidden { display: none; }
     .status-ok { color: var(--ok); }
     .status-err { color: var(--err); }
     @media (max-width: 980px) {
@@ -106,7 +136,8 @@ def get_ui_html() -> str:
     <div class="content">
       <section class="panel">
         <h3>Streaming Output</h3>
-        <pre id="output"></pre>
+        <pre id="outputRaw"></pre>
+        <div id="outputRendered" class="rendered hidden"></div>
       </section>
       <section class="panel">
         <h3>Metadata (30%)</h3>
@@ -115,8 +146,11 @@ def get_ui_html() -> str:
     </div>
   </div>
 
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/15.0.12/marked.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/highlight.min.js"></script>
   <script>
-    const output = document.getElementById("output");
+    const outputRaw = document.getElementById("outputRaw");
+    const outputRendered = document.getElementById("outputRendered");
     const meta = document.getElementById("meta");
     const runBtn = document.getElementById("runBtn");
     const promptEl = document.getElementById("prompt");
@@ -129,6 +163,70 @@ def get_ui_html() -> str:
 
     function renderMeta(state) {
       meta.textContent = JSON.stringify(state, null, 2);
+    }
+
+    function toMarkdown(rawText) {
+      const lines = rawText.split("\\n");
+      const transformed = [];
+      for (const line of lines) {
+        const header = line.match(/^\\[STAR\\] request_id=(\\S+) session=(\\S+)/);
+        if (header) {
+          transformed.push("### Request");
+          transformed.push("- request_id: `" + header[1] + "`");
+          transformed.push("- session_id: `" + header[2] + "`");
+          continue;
+        }
+        const analyze = line.match(/^\\[STAR\\] Analyzing prompt\\.\\.\\.$/);
+        if (analyze) {
+          transformed.push("> Analyzing prompt...");
+          continue;
+        }
+        const split = line.match(/^\\[STAR\\] split → (\\d+) task\\(s\\) dispatched concurrently$/);
+        if (split) {
+          transformed.push("### Routing");
+          transformed.push("- split: `true`");
+          transformed.push("- task_count: `" + split[1] + "`");
+          continue;
+        }
+        const single = line.match(/^\\[STAR\\] single task → (\\d+) task\\(s\\) dispatched concurrently$/);
+        if (single) {
+          transformed.push("### Routing");
+          transformed.push("- split: `false`");
+          transformed.push("- task_count: `" + single[1] + "`");
+          continue;
+        }
+        const task = line.match(/^--- Task (\\d+): (.+) \\(via (.+)\\) ---$/);
+        if (task) {
+          transformed.push("");
+          transformed.push("## Task " + task[1] + ": " + task[2]);
+          transformed.push("_Model: `" + task[3] + "`_");
+          transformed.push("");
+          continue;
+        }
+        const done = line.match(/^\\[STAR\\] Done\\. (\\d+) task\\(s\\) completed\\.$/);
+        if (done) {
+          transformed.push("");
+          transformed.push("---");
+          transformed.push("**Done. " + done[1] + " task(s) completed.**");
+          continue;
+        }
+        transformed.push(line);
+      }
+      return transformed.join("\\n");
+    }
+
+    function renderFinalOutput(rawText) {
+      const markdown = toMarkdown(rawText);
+      const html = marked.parse(markdown, {
+        breaks: true,
+        gfm: true,
+      });
+      outputRendered.innerHTML = html;
+      outputRendered.querySelectorAll("pre code").forEach((block) => {
+        hljs.highlightElement(block);
+      });
+      outputRaw.classList.add("hidden");
+      outputRendered.classList.remove("hidden");
     }
 
     function parseLine(line, state) {
@@ -174,7 +272,10 @@ def get_ui_html() -> str:
         tasks: [],
         status: "running"
       };
-      output.textContent = "";
+      outputRaw.textContent = "";
+      outputRaw.classList.remove("hidden");
+      outputRendered.classList.add("hidden");
+      outputRendered.innerHTML = "";
       renderMeta(state);
       runBtn.disabled = true;
       runBtn.textContent = "Running...";
@@ -191,12 +292,14 @@ def get_ui_html() -> str:
         const reader = resp.body.getReader();
         const decoder = new TextDecoder();
         let buffered = "";
+        let fullText = "";
         while (true) {
           const { value, done } = await reader.read();
           if (done) break;
           const chunk = decoder.decode(value, { stream: true });
-          output.textContent += chunk;
-          output.scrollTop = output.scrollHeight;
+          fullText += chunk;
+          outputRaw.textContent += chunk;
+          outputRaw.scrollTop = outputRaw.scrollHeight;
           buffered += chunk;
           const lines = buffered.split("\\n");
           buffered = lines.pop() || "";
@@ -204,6 +307,7 @@ def get_ui_html() -> str:
           renderMeta(state);
         }
         if (buffered) parseLine(buffered, state);
+        renderFinalOutput(fullText);
         state.status = "success";
       } catch (err) {
         state.status = "error";
