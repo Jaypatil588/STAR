@@ -33,7 +33,7 @@ def resolve_model_for_task(tool: str, complexity: str) -> str:
     
     # Group 2: Instructions, RAG, & Text
     if tool in TEXT_GROUP:
-        return "gpt-5.4-pro" if complexity == "high" else "chatgpt-nano"
+        return "gpt-5.4" if complexity == "high" else "gpt-5.4-nano"
         
     # Group 3: Math, Logic, & Data
     if tool in REASONING_GROUP:
@@ -41,10 +41,10 @@ def resolve_model_for_task(tool: str, complexity: str) -> str:
         
     # Group 4: Vision & Audio Processing
     if tool in MULTIMODAL_GROUP:
-        return "gpt-5.4-pro" if complexity == "high" else "chatgpt-nano"
+        return "gpt-5.4" if complexity == "high" else "gpt-5.4-nano"
         
     # Fallback default
-    return "chatgpt-nano"
+    return "gpt-5.4-nano"
 
 
 async def callAgents(task_analysis: SLMTaskAnalysis) -> dict[str, Any]:

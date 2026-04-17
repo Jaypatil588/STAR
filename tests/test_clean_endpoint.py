@@ -32,7 +32,7 @@ def test_clean_endpoint(override_slm_client):
     assert len(agent_result["execution_plan"]) == 2
     
     # Check resolution logic:
-    # web_search, low -> chatgpt-nano
-    assert agent_result["execution_plan"][0]["assigned_model"] == "chatgpt-nano"
+    # web_search, low -> gpt-5.4-nano
+    assert agent_result["execution_plan"][0]["assigned_model"] == "gpt-5.4-nano"
     # code_generation, high -> claude-opus-4.7
     assert agent_result["execution_plan"][1]["assigned_model"] == "claude-opus-4.7"

@@ -1,0 +1,31 @@
+import paramiko
+from scp import SCPClient
+import os
+
+host = "192.168.50.218"
+user = "gpuuser"
+password = "fMReDquSrYwN"
+
+try:
+    client = paramiko.SSHClient()
+    client.load_system_host_keys()
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    client.connect(host, username=user, password=password, timeout=10)
+
+    scp = SCPClient(client.get_transport())
+    
+    # Sync agent_dispatch.py
+    scp.put("app/agent_dispatch.py", remote_path="~/star-router/app/agent_dispatch.py")
+    
+    # Restart the server
+    stdin, stdout, stderr = client.exec_command("cd star-router && if [ -f router.pid ]; then kill $(cat router.pid); rm router.pid; fi")
+    stdout.channel.recv_exit_status()
+    
+    stdin, stdout, stderr = client.exec_command("cd star-router && nohup /usr/bin/python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8080 > router.log 2>&1 & echo $! > router.pid")
+    stdout.channel.recv_exit_status()
+    
+    scp.close()
+    client.close()
+    print("Agent Dispatch synced and remote server restarted!")
+except Exception as e:
+    print(f"Error: {e}")
