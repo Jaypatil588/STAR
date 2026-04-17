@@ -11,20 +11,20 @@ def get_ui_html() -> str:
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/styles/github-dark.min.css" />
   <style>
     :root {
-      --bg: #0b1220;
-      --panel: #111b2f;
-      --panel-2: #0f1729;
-      --border: #253350;
-      --text: #e5edf8;
-      --muted: #9db0d1;
-      --accent: #4cc9f0;
-      --ok: #66d18f;
-      --err: #f07178;
+      --bg: #000000;
+      --panel: #121212;
+      --panel-2: #1a1a1a;
+      --border: #2b2b2b;
+      --text: #e0e0e0;
+      --muted: #9e9e9e;
+      --accent: #bdbdbd;
+      --ok: #81c784;
+      --err: #ef9a9a;
     }
     * { box-sizing: border-box; }
     body {
       margin: 0;
-      background: radial-gradient(circle at 20% 10%, #13203a 0%, #0b1220 45%);
+      background: radial-gradient(circle at 20% 10%, #161616 0%, #000000 50%);
       color: var(--text);
       font-family: "SF Mono", Menlo, Monaco, Consolas, "Liberation Mono", monospace;
       min-height: 100vh;
@@ -54,18 +54,21 @@ def get_ui_html() -> str:
     textarea { min-height: 88px; resize: vertical; grid-column: 1 / -1; }
     button {
       cursor: pointer;
-      background: linear-gradient(90deg, #3aa0ff, #4cc9f0);
-      color: #041224;
+      background: #2f2f2f;
+      color: #f5f5f5;
       font-weight: 700;
-      border: none;
+      border: 1px solid #4a4a4a;
       height: 42px;
       min-width: 150px;
+    }
+    button:hover {
+      background: #3a3a3a;
     }
     .content { display: grid; grid-template-columns: 70% 30%; gap: 12px; }
     .panel {
       border: 1px solid var(--border);
       border-radius: 12px;
-      background: rgba(17, 27, 47, 0.92);
+      background: rgba(18, 18, 18, 0.96);
       min-height: 520px;
       overflow: hidden;
     }
@@ -97,13 +100,13 @@ def get_ui_html() -> str:
     }
     .rendered h2, .rendered h3 {
       margin: 12px 0 8px;
-      color: #9bd8ff;
+      color: #cfcfcf;
     }
     .rendered p, .rendered ul, .rendered ol {
       margin: 8px 0;
     }
     .rendered code {
-      background: rgba(12, 19, 34, 0.8);
+      background: #0d0d0d;
       border: 1px solid var(--border);
       border-radius: 6px;
       padding: 2px 5px;
