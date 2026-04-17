@@ -17,6 +17,7 @@ from app.config import get_settings
 from app.models import GPT4OModelRequest, RouteModelRequest, RouteRequest
 from app.router_service import RouterService
 from app.session_store import InMemorySessionStore
+from app.pii_service import PIIService
 
 
 def create_app(router_service: Optional[RouterService] = None) -> FastAPI:
@@ -70,10 +71,30 @@ def create_app(router_service: Optional[RouterService] = None) -> FastAPI:
     app = FastAPI(title="STAR Router", version="0.1.0")
     app.state.endpoint_caller = endpoint_caller
     app.state.gpt4o_client = gpt4o_client
+    app.state.pii_service = PIIService()
 
     @app.get("/health")
     async def health() -> dict[str, str]:
         return {"status": "ok"}
+
+    @app.post("/v1/clean")
+    async def clean_prompt(request: RouteRequest) -> dict:
+        request_id = request.request_id or str(uuid4())
+        try:
+            cleaned_prompt = app.state.pii_service.clean_text(request.prompt)
+            return {
+                "request_id": request_id,
+                "session_id": request.session_id,
+                "cleaned_prompt": cleaned_prompt,
+                "status": "success",
+            }
+        except Exception as exc:
+            return {
+                "request_id": request_id,
+                "session_id": request.session_id,
+                "error": str(exc),
+                "status": "error",
+            }
 
     @app.post("/v1/star")
     async def star(request: RouteRequest) -> dict:
