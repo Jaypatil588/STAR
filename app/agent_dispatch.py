@@ -129,44 +129,23 @@ async def _execute_task(task: Dict[str, Any]) -> Dict[str, Any]:
     task["status"] = "completed"
     return task
 
-async def callAgents(task_analysis: SLMTaskAnalysis) -> dict[str, Any]:
+async def callAgents(task_analysis: SLMTaskAnalysis):
     """
-    Agent dispatch. Iterates over sub-tasks from the SLM,
-    resolves the accurate model mapping for each, executes them concurrently,
-    and combines all outputs into a unified response.
+    Agent dispatch. Fires all sub-tasks concurrently and yields each result
+    as soon as the individual API call returns (asyncio.as_completed).
+    Caller receives one task dict at a time, in completion order.
     """
     execution_plan = []
-    
+
     for task in task_analysis.prompts:
         target_model = resolve_model_for_task(task.tool, task.complexity)
-        
         assigned_task = task.model_dump()
         assigned_task["assigned_model"] = target_model
         assigned_task["status"] = "executing"
-        
         execution_plan.append(assigned_task)
-        
-    # Concurrently execute all assigned tasks
-    executed_tasks = list(await asyncio.gather(*(
-        _execute_task(t) for t in execution_plan
-    )))
-    
-    # Combine all outputs into a single message
-    if len(executed_tasks) == 1:
-        combined_output = executed_tasks[0].get("output", "")
-    else:
-        parts = []
-        for i, task in enumerate(executed_tasks, 1):
-            label = task.get("tool", f"task_{i}").replace("_", " ").title()
-            model = task.get("assigned_model", "unknown")
-            output = task.get("output", "")
-            parts.append(f"### [{i}] {label} (via {model})\n\n{output}")
-        combined_output = "\n\n---\n\n".join(parts)
-        
-    return {
-        "status": "completed",
-        "message": "Tasks successfully executed by target models",
-        "task_count": len(executed_tasks),
-        "execution_plan": executed_tasks,
-        "combined_output": combined_output,
-    }
+
+    # Launch all tasks concurrently, yield each as it finishes
+    futs = [asyncio.ensure_future(_execute_task(t)) for t in execution_plan]
+    for fut in asyncio.as_completed(futs):
+        result = await fut
+        yield result

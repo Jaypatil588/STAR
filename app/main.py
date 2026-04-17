@@ -1,9 +1,11 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+import json
+from typing import Any, AsyncGenerator, Dict, Optional
 from uuid import uuid4
 
 from fastapi import FastAPI
+from fastapi.responses import StreamingResponse
 
 from app.clients import (
     EndpointCaller,
@@ -88,45 +90,43 @@ def create_app(router_service: Optional[RouterService] = None) -> FastAPI:
         return {"status": "ok"}
 
     @app.post("/v1/clean")
-    async def clean_prompt(request: CleanRequest) -> dict:
+    async def clean_prompt(request: CleanRequest) -> StreamingResponse:
         request_id = request.request_id or str(uuid4())
-        try:
-            # 1. Call SLM for task analysis
-            task_analysis = await app.state.slm_task_client.analyze(
-                prompt=request.prompt,
-                session_id=request.session_id,
-            )
-            
-            # 2. Pass to agent dispatch
-            agent_result = await callAgents(task_analysis)
-            
-            return {
-                "request_id": request_id,
-                "session_id": request.session_id,
-                "fixed_response": {
-                    "stage": "clean",
-                    "decision": "call_qwen_task_analyzer",
-                    "target": settings.slm_task_api_url,
-                },
-                "original_prompt": request.prompt,
-                "task_analysis": task_analysis.model_dump(),
-                "agent_result": agent_result,
-                "combined_output": agent_result.get("combined_output", ""),
-                "final_response": task_analysis.model_dump(),
-                "status": "success",
-            }
-        except Exception as exc:
-            return {
-                "request_id": request_id,
-                "session_id": request.session_id,
-                "fixed_response": {
-                    "stage": "clean",
-                    "decision": "call_qwen_task_analyzer",
-                    "target": settings.slm_task_api_url,
-                },
-                "error": str(exc),
-                "status": "error",
-            }
+
+        async def stream() -> AsyncGenerator[str, None]:
+            # Header line
+            yield f"[STAR] request_id={request_id} session={request.session_id}\n"
+            yield f"[STAR] Analyzing prompt...\n"
+
+            try:
+                task_analysis = await app.state.slm_task_client.analyze(
+                    prompt=request.prompt,
+                    session_id=request.session_id,
+                )
+            except Exception as exc:
+                yield f"[ERROR] SLM analysis failed: {exc}\n"
+                return
+
+            task_count = len(task_analysis.prompts)
+            split_label = "split" if task_analysis.split else "single task"
+            yield f"[STAR] {split_label} → {task_count} task(s) dispatched concurrently\n"
+            yield "\n"
+
+            task_idx = 0
+            async for result in callAgents(task_analysis):
+                task_idx += 1
+                tool  = result.get("tool", "unknown").replace("_", " ").title()
+                model = result.get("assigned_model", "unknown")
+                output = result.get("output", "")
+
+                yield f"--- Task {task_idx}: {tool} (via {model}) ---\n"
+                yield output
+                yield "\n\n"
+
+            yield f"[STAR] Done. {task_idx} task(s) completed.\n"
+
+        return StreamingResponse(stream(), media_type="text/plain")
+
 
     @app.post("/v1/pil-clean")
     async def pil_clean(request: PILCleanRequest) -> dict:
