@@ -5,7 +5,7 @@ from typing import Any, AsyncGenerator, Dict, Optional
 from uuid import uuid4
 
 from fastapi import FastAPI
-from fastapi.responses import StreamingResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 
 from app.clients import (
     EndpointCaller,
@@ -20,6 +20,7 @@ from app.router_service import RouterService
 from app.session_store import InMemorySessionStore
 from app.slm_task_client import SLMTaskClient
 from app.agent_dispatch import callAgents
+from app.ui import get_ui_html
 from app.models import (
     GPT4OModelRequest,
     PILCleanRequest,
@@ -93,6 +94,10 @@ def create_app(router_service: Optional[RouterService] = None) -> FastAPI:
     @app.get("/health")
     async def health() -> dict[str, str]:
         return {"status": "ok"}
+
+    @app.get("/", response_class=HTMLResponse)
+    async def ui() -> str:
+        return get_ui_html()
 
     @app.post("/v1/clean")
     async def clean_prompt(request: CleanRequest) -> StreamingResponse:
