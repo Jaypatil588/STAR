@@ -28,7 +28,7 @@ def test_clean_endpoint(override_slm_client):
     assert len(data["task_analysis"]["prompts"]) == 2
     
     agent_result = data["agent_result"]
-    assert agent_result["status"] == "pending_execution"
+    assert agent_result["status"] == "completed"
     assert len(agent_result["execution_plan"]) == 2
     
     # Check resolution logic:

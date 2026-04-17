@@ -21,6 +21,7 @@ class Settings(BaseModel):
     openai_api_key: Optional[str] = Field(default=None)
     openai_model: str = Field(default="gpt-4o")
     openai_base_url: str = Field(default="https://api.openai.com/v1/responses")
+    anthropic_api_key: Optional[str] = Field(default=None)
     internal_base_url: str = Field(default="http://127.0.0.1:8080")
     internal_timeout_ms: int = Field(default=15_000)
 
@@ -43,6 +44,7 @@ class Settings(BaseModel):
             openai_base_url=os.getenv(
                 "OPENAI_BASE_URL", "https://api.openai.com/v1/responses"
             ),
+            anthropic_api_key=os.getenv("ANTHROPIC_API_KEY"),
             internal_base_url=os.getenv("INTERNAL_BASE_URL", "http://127.0.0.1:8080"),
             internal_timeout_ms=int(os.getenv("INTERNAL_TIMEOUT_MS", "15000")),
         )
