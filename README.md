@@ -6,12 +6,21 @@ FastAPI service that:
 - Routes first to a placeholder downstream target
 - Summarizes context after routing
 - Persists rolling per-session context in memory
+- Returns two explicit stages:
+- `response_1`: SLM routing decision (`model_id` + routing metadata)
+- `response_2`: model execution result from the selected model
 
 ## Run
 
 ```bash
 uvicorn app.main:app --reload
 ```
+
+## Endpoints
+
+- `POST /v1/slm-route`: stage-1 only (SLM routing response)
+- `POST /v1/route`: full flow (stage-1 routing + stage-2 model response)
+- `GET /health`
 
 ## Environment
 

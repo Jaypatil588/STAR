@@ -139,9 +139,9 @@ def test_continue_prefers_complex_for_complex_continuation() -> None:
     first = run_route(service, {"prompt": "build deep migration plan", "session_id": "flow-1"})
     second = run_route(service, {"prompt": "continue with rollback plan", "session_id": "flow-1"})
 
-    assert first["selected_model_key"] == COMPLEX_MODEL_KEY
-    assert second["selected_model_key"] == COMPLEX_MODEL_KEY
-    assert second["decision"] == "continue"
+    assert first["response_1"]["selected_model_key"] == COMPLEX_MODEL_KEY
+    assert second["response_1"]["selected_model_key"] == COMPLEX_MODEL_KEY
+    assert second["response_1"]["decision"] == "continue"
 
 
 def test_switches_to_simple_for_simple_non_continuation() -> None:
@@ -154,9 +154,9 @@ def test_switches_to_simple_for_simple_non_continuation() -> None:
     run_route(service, {"prompt": "map complete security control matrix", "session_id": "flow-2"})
     second = run_route(service, {"prompt": "what is tls", "session_id": "flow-2"})
 
-    assert second["previous_model_key"] == COMPLEX_MODEL_KEY
-    assert second["selected_model_key"] == SIMPLE_MODEL_KEY
-    assert second["decision"] == "switch"
+    assert second["response_1"]["previous_model_key"] == COMPLEX_MODEL_KEY
+    assert second["response_1"]["selected_model_key"] == SIMPLE_MODEL_KEY
+    assert second["response_1"]["decision"] == "switch"
 
 
 def test_slm_failure_reuses_previous_model() -> None:
@@ -166,9 +166,9 @@ def test_slm_failure_reuses_previous_model() -> None:
     first = run_route(service, {"prompt": "what is udp", "session_id": "flow-3"})
     second = run_route(service, {"prompt": "and tcp?", "session_id": "flow-3"})
 
-    assert first["selected_model_key"] == SIMPLE_MODEL_KEY
-    assert second["selected_model_key"] == SIMPLE_MODEL_KEY
-    assert second["routing_metadata"]["slm_failed"] is True
+    assert first["response_1"]["selected_model_key"] == SIMPLE_MODEL_KEY
+    assert second["response_1"]["selected_model_key"] == SIMPLE_MODEL_KEY
+    assert second["response_1"]["routing_metadata"]["slm_failed"] is True
 
 
 def test_post_route_summary_persists_for_next_turn() -> None:
@@ -181,11 +181,14 @@ def test_post_route_summary_persists_for_next_turn() -> None:
     first = run_route(service, {"prompt": "draft SOC2 checklist", "session_id": "flow-4"})
     second = run_route(service, {"prompt": "add evidence requirements", "session_id": "flow-4"})
 
-    assert first["session_context_state"]["post_route_summary_updated"] is True
+    assert first["response_2"]["session_context_state"]["post_route_summary_updated"] is True
     assert downstream.calls[1]["session_summary"] == "summary:1:complex_default_v1"
-    assert second["session_context_state"]["post_route_summary_preview"] == "summary:2:complex_default_v1"
-    assert second["session_context_state"]["turn_count_after"] == 2
-    assert second["previous_model_key"] == COMPLEX_MODEL_KEY
+    assert (
+        second["response_2"]["session_context_state"]["post_route_summary_preview"]
+        == "summary:2:complex_default_v1"
+    )
+    assert second["response_2"]["session_context_state"]["turn_count_after"] == 2
+    assert second["response_1"]["previous_model_key"] == COMPLEX_MODEL_KEY
 
 
 def test_routes_before_summarization() -> None:
@@ -196,3 +199,16 @@ def test_routes_before_summarization() -> None:
     response = run_route(service, {"prompt": "plan incident workflow", "session_id": "flow-5"})
     assert response["status"] == "success"
     assert events == ["slm", "downstream", "summarizer"]
+
+
+def test_slm_route_only_returns_only_stage_1() -> None:
+    slm_outputs = [{"complexity": "high", "recommended_model_key": COMPLEX_MODEL_KEY}]
+    service, _, downstream, summarizer, _ = build_test_service(slm_outputs=slm_outputs)
+
+    request = RouteRequest(prompt="route me", session_id="flow-6")
+    response = asyncio.run(service.slm_route_only(request))
+
+    assert response["response_1"]["stage"] == "slm_route"
+    assert "response_2" not in response
+    assert len(downstream.calls) == 0
+    assert len(summarizer.calls) == 0

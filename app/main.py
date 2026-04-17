@@ -58,6 +58,10 @@ def create_app(router_service: Optional[RouterService] = None) -> FastAPI:
     async def route(request: RouteRequest) -> dict:
         return await router_service.route(request)
 
+    @app.post("/v1/slm-route")
+    async def slm_route(request: RouteRequest) -> dict:
+        return await router_service.slm_route_only(request)
+
     return app
 
 
