@@ -18,7 +18,7 @@ class MockEndpointCaller:
         if path == "/v1/clean":
             return {
                 "status": "success",
-                "final_response": {"split": False, "prompts": []},
+                "output": "[STAR] split → 2 task(s) dispatched concurrently",
             }
         return {"status": "error", "error": "unexpected path"}
 
@@ -54,5 +54,6 @@ def test_pil_clean_forwards_to_clean():
     assert data["status"] == "success"
     assert data["cleaned_prompt"] == "hi there"
     assert data["fixed_response"]["next_endpoint"] == "/v1/clean"
+    assert "output" in data["final_response"]
     assert len(caller.calls) == 1
     assert caller.calls[0]["path"] == "/v1/clean"

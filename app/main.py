@@ -165,7 +165,7 @@ def create_app(router_service: Optional[RouterService] = None) -> FastAPI:
             "cleaned_prompt": cleaned_prompt,
             "fixed_response": fixed_response,
             "clean_response": clean_response,
-            "final_response": clean_response.get("final_response"),
+            "final_response": _extract_final_response(clean_response),
             "status": final_status,
         }
 
@@ -197,7 +197,7 @@ def create_app(router_service: Optional[RouterService] = None) -> FastAPI:
             "input_prompt": request.prompt,
             "fixed_response": fixed_response,
             "pil_clean_response": pil_response,
-            "final_response": pil_response.get("final_response"),
+            "final_response": _extract_final_response(pil_response),
             "status": final_status,
         }
 
@@ -328,6 +328,25 @@ def _context_to_summary(context: Optional[Dict[str, Any]]) -> str:
 def _pil_clean_text(prompt: str) -> str:
     cleaned = " ".join(prompt.strip().split())
     return cleaned
+
+
+def _extract_final_response(payload: Optional[Dict[str, Any]]) -> Any:
+    if not isinstance(payload, dict):
+        return None
+    if "final_response" in payload and payload["final_response"] is not None:
+        return payload["final_response"]
+    if "output" in payload:
+        return {"output": payload.get("output")}
+    clean_response = payload.get("clean_response")
+    if isinstance(clean_response, dict):
+        if (
+            "final_response" in clean_response
+            and clean_response["final_response"] is not None
+        ):
+            return clean_response["final_response"]
+        if "output" in clean_response:
+            return {"output": clean_response.get("output")}
+    return None
 
 
 app = create_app()
