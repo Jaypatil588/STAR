@@ -26,4 +26,13 @@ def test_clean_endpoint(override_slm_client):
     assert data["status"] == "success"
     assert data["task_analysis"]["split"] is True
     assert len(data["task_analysis"]["prompts"]) == 2
-    assert data["agent_result"]["status"] == "pending"
+    
+    agent_result = data["agent_result"]
+    assert agent_result["status"] == "pending_execution"
+    assert len(agent_result["execution_plan"]) == 2
+    
+    # Check resolution logic:
+    # web_search, low -> chatgpt-nano
+    assert agent_result["execution_plan"][0]["assigned_model"] == "chatgpt-nano"
+    # code_generation, high -> claude-opus-4.7
+    assert agent_result["execution_plan"][1]["assigned_model"] == "claude-opus-4.7"
