@@ -33,7 +33,7 @@ def resolve_model_for_task(tool: str, complexity: str) -> str:
     """
     # Group 1: Code & Execution
     if tool in CODE_GROUP:
-        return "claude-opus-4.7" if complexity == "high" else "claude-sonnet-4.6"
+        return "claude-opus-4-7" if complexity == "high" else "claude-sonnet-4-5"
     
     # Group 2: Instructions, RAG, & Text
     if tool in TEXT_GROUP:
@@ -41,7 +41,7 @@ def resolve_model_for_task(tool: str, complexity: str) -> str:
         
     # Group 3: Math, Logic, & Data
     if tool in REASONING_GROUP:
-        return "gpt-4o" if complexity == "high" else "claude-sonnet-4.6"
+        return "gpt-4o" if complexity == "high" else "claude-sonnet-4-5"
         
     # Group 4: Vision & Audio Processing
     if tool in MULTIMODAL_GROUP:

@@ -42,8 +42,8 @@ def test_clean_endpoint_streams(override_slm_client):
     # Model routing correct per dispatch matrix
     # web_search low -> gpt-4o-mini
     assert "gpt-4o-mini" in text
-    # code_generation high -> claude-opus-4.7
-    assert "claude-opus-4.7" in text
+    # code_generation high -> claude-opus-4-7
+    assert "claude-opus-4-7" in text
 
     # Footer present
     assert "Done." in text
