@@ -111,6 +111,7 @@ def create_app(router_service: Optional[RouterService] = None) -> FastAPI:
                 "original_prompt": request.prompt,
                 "task_analysis": task_analysis.model_dump(),
                 "agent_result": agent_result,
+                "combined_output": agent_result.get("combined_output", ""),
                 "final_response": task_analysis.model_dump(),
                 "status": "success",
             }

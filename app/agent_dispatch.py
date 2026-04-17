@@ -132,7 +132,8 @@ async def _execute_task(task: Dict[str, Any]) -> Dict[str, Any]:
 async def callAgents(task_analysis: SLMTaskAnalysis) -> dict[str, Any]:
     """
     Agent dispatch. Iterates over sub-tasks from the SLM,
-    resolves the accurate model mapping for each, and executes them concurrently.
+    resolves the accurate model mapping for each, executes them concurrently,
+    and combines all outputs into a unified response.
     """
     execution_plan = []
     
@@ -146,13 +147,26 @@ async def callAgents(task_analysis: SLMTaskAnalysis) -> dict[str, Any]:
         execution_plan.append(assigned_task)
         
     # Concurrently execute all assigned tasks
-    executed_tasks = await asyncio.gather(*(
+    executed_tasks = list(await asyncio.gather(*(
         _execute_task(t) for t in execution_plan
-    ))
+    )))
+    
+    # Combine all outputs into a single message
+    if len(executed_tasks) == 1:
+        combined_output = executed_tasks[0].get("output", "")
+    else:
+        parts = []
+        for i, task in enumerate(executed_tasks, 1):
+            label = task.get("tool", f"task_{i}").replace("_", " ").title()
+            model = task.get("assigned_model", "unknown")
+            output = task.get("output", "")
+            parts.append(f"### [{i}] {label} (via {model})\n\n{output}")
+        combined_output = "\n\n---\n\n".join(parts)
         
     return {
         "status": "completed",
         "message": "Tasks successfully executed by target models",
         "task_count": len(executed_tasks),
-        "execution_plan": list(executed_tasks),
+        "execution_plan": executed_tasks,
+        "combined_output": combined_output,
     }
