@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Dict, Optional
+import re
+from typing import Any, Dict, List, Optional, Tuple
 
 import httpx
 
@@ -68,16 +69,33 @@ class SLMTaskClient:
     async def analyze(self, prompt: str, session_id: str) -> SLMTaskAnalysis:
         raw_text = ""
         last_error: Optional[Exception] = None
+        split_candidates = self._extract_split_candidates(prompt)
+        should_force_split = len(split_candidates) >= 2
+        force_mode_triggered = False
 
         for attempt in range(2):
             try:
                 raw_text = await self._call_chat_completions(
                     prompt=prompt,
                     session_id=session_id,
-                    repair_input=raw_text if attempt == 1 else None,
+                    repair_input=raw_text if (attempt == 1 and last_error is not None) else None,
+                    force_split_candidates=split_candidates if should_force_split else None,
+                    force_mode=force_mode_triggered,
                 )
                 payload = self._parse_json_output(raw_text)
-                return SLMTaskAnalysis.model_validate(payload)
+                parsed = SLMTaskAnalysis.model_validate(payload)
+                if should_force_split and (
+                    (not parsed.split) or len(parsed.prompts) < 2
+                ):
+                    if not force_mode_triggered:
+                        force_mode_triggered = True
+                        continue
+                    # Hard backstop for now: if conjunction exists and model still refuses,
+                    # split deterministically so downstream can execute parallel tasks.
+                    return self._deterministic_split_result(
+                        prompt=prompt, split_candidates=split_candidates
+                    )
+                return parsed
             except Exception as exc:
                 last_error = exc
                 logger.warning(
@@ -88,6 +106,10 @@ class SLMTaskClient:
                 )
 
         logger.error("Failed to parse SLM task analysis after retries: %s", last_error)
+        if should_force_split:
+            return self._deterministic_split_result(
+                prompt=prompt, split_candidates=split_candidates
+            )
         # SLM-only strict policy: still return a schema-valid object, but mark as unsplit fallback.
         return SLMTaskAnalysis(
             split=False,
@@ -101,7 +123,12 @@ class SLMTaskClient:
         )
 
     async def _call_chat_completions(
-        self, prompt: str, session_id: str, repair_input: Optional[str]
+        self,
+        prompt: str,
+        session_id: str,
+        repair_input: Optional[str],
+        force_split_candidates: Optional[List[str]],
+        force_mode: bool,
     ) -> str:
         user_text = prompt
         if repair_input:
@@ -110,6 +137,24 @@ class SLMTaskClient:
                 "Return only corrected JSON with no extra text.\n"
                 "Previous output:\n{0}\n\nOriginal prompt:\n{1}"
             ).format(repair_input, prompt)
+        elif force_split_candidates and not force_mode:
+            intents = "\n".join(
+                ["- {0}".format(item) for item in force_split_candidates]
+            )
+            user_text = (
+                "SPLIT_HINT: the prompt appears to contain multiple actionable intents.\n"
+                "Prefer split=true when intents are distinct.\n"
+                "Detected intent fragments:\n{0}\n\nOriginal prompt:\n{1}"
+            ).format(intents, prompt)
+        elif force_mode and force_split_candidates:
+            intents = "\n".join(
+                ["- {0}".format(item) for item in force_split_candidates]
+            )
+            user_text = (
+                "FORCE_SPLIT_MODE: this prompt contains multiple intents.\n"
+                "You must return split=true and at least {0} prompts.\n"
+                "Detected intent fragments:\n{1}\n\nOriginal prompt:\n{2}"
+            ).format(len(force_split_candidates), intents, prompt)
 
         body: Dict[str, Any] = {
             "model": self._model,
@@ -161,3 +206,43 @@ class SLMTaskClient:
         if cleaned.endswith("```"):
             cleaned = cleaned[:-3]
         return json.loads(cleaned.strip())
+
+    @staticmethod
+    def _extract_split_candidates(prompt: str) -> List[str]:
+        normalized = " ".join(prompt.strip().split())
+        # Backstop connectors: and / then / also / &
+        parts = re.split(
+            r"\s+(?:and then|then|and|or|also|&)\s+",
+            normalized,
+            flags=re.IGNORECASE,
+        )
+        cleaned = [p.strip(" ,.;:") for p in parts if p.strip(" ,.;:")]
+        return cleaned if len(cleaned) >= 2 else []
+
+    def _deterministic_split_result(
+        self, prompt: str, split_candidates: List[str]
+    ) -> SLMTaskAnalysis:
+        prompts: List[Dict[str, str]] = []
+        for fragment in split_candidates:
+            tool, complexity = self._infer_tool_complexity(fragment)
+            prompts.append(
+                {
+                    "prompt": fragment,
+                    "tool": tool,
+                    "complexity": complexity,
+                }
+            )
+        return SLMTaskAnalysis.model_validate({"split": True, "prompts": prompts})
+
+    @staticmethod
+    def _infer_tool_complexity(fragment: str) -> Tuple[str, str]:
+        text = fragment.lower()
+        if any(k in text for k in ["code", "python", "javascript", "program", "game"]):
+            return "code_generation", "high"
+        if any(k in text for k in ["story", "poem", "write", "creative"]):
+            return "creative_writing", "high"
+        if any(k in text for k in ["summarize", "summary"]):
+            return "summarization", "low"
+        if any(k in text for k in ["translate"]):
+            return "translation", "low"
+        return "logical_reasoning", "low"

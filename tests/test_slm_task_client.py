@@ -103,3 +103,136 @@ def test_slm_task_client_retries_with_repair_prompt(monkeypatch):
     assert len(calls) == 2
     repair_user_message = calls[1]["json"]["messages"][1]["content"]
     assert "invalid JSON" in repair_user_message
+
+
+def test_slm_task_client_force_split_retry_when_unsplit(monkeypatch):
+    calls: List[Dict[str, Any]] = []
+    responses = [
+        {
+            "choices": [
+                {
+                    "message": {
+                        "content": (
+                            '{"split": false, "prompts": [{"prompt":"write a creative story and make code game for it",'
+                            '"tool":"logical_reasoning","complexity":"high"}]}'
+                        )
+                    }
+                }
+            ]
+        },
+        {
+            "choices": [
+                {
+                    "message": {
+                        "content": (
+                            '{"split": true, "prompts": [{"prompt":"write a creative story",'
+                            '"tool":"creative_writing","complexity":"high"},{"prompt":"make code game for it",'
+                            '"tool":"code_generation","complexity":"high"}]}'
+                        )
+                    }
+                }
+            ]
+        },
+    ]
+
+    def fake_client_factory(*args, **kwargs):
+        return FakeAsyncClient(responses=responses, calls=calls, timeout=kwargs.get("timeout", 0))
+
+    monkeypatch.setattr(httpx, "AsyncClient", fake_client_factory)
+
+    client = SLMTaskClient(api_url="http://localhost:8001/v1/chat/completions")
+    result = asyncio.run(
+        client.analyze("write a creative story and make code game for it", "s3")
+    )
+
+    assert result.split is True
+    assert len(result.prompts) == 2
+    assert len(calls) == 2
+    assert "SPLIT_HINT" in calls[0]["json"]["messages"][1]["content"]
+    assert "FORCE_SPLIT_MODE" in calls[1]["json"]["messages"][1]["content"]
+
+
+def test_slm_task_client_deterministic_split_backstop(monkeypatch):
+    calls: List[Dict[str, Any]] = []
+    responses = [
+        {
+            "choices": [
+                {
+                    "message": {
+                        "content": (
+                            '{"split": false, "prompts": [{"prompt":"write a creative story and make code game for it",'
+                            '"tool":"logical_reasoning","complexity":"high"}]}'
+                        )
+                    }
+                }
+            ]
+        },
+        {
+            "choices": [
+                {
+                    "message": {
+                        "content": (
+                            '{"split": false, "prompts": [{"prompt":"write a creative story and make code game for it",'
+                            '"tool":"logical_reasoning","complexity":"high"}]}'
+                        )
+                    }
+                }
+            ]
+        },
+    ]
+
+    def fake_client_factory(*args, **kwargs):
+        return FakeAsyncClient(responses=responses, calls=calls, timeout=kwargs.get("timeout", 0))
+
+    monkeypatch.setattr(httpx, "AsyncClient", fake_client_factory)
+
+    client = SLMTaskClient(api_url="http://localhost:8001/v1/chat/completions")
+    result = asyncio.run(
+        client.analyze("write a creative story and make code game for it", "s4")
+    )
+
+    assert result.split is True
+    assert len(result.prompts) == 2
+    assert result.prompts[0].tool == "creative_writing"
+    assert result.prompts[1].tool == "code_generation"
+
+
+def test_slm_task_client_deterministic_split_with_or(monkeypatch):
+    calls: List[Dict[str, Any]] = []
+    responses = [
+        {
+            "choices": [
+                {
+                    "message": {
+                        "content": (
+                            '{"split": false, "prompts": [{"prompt":"write a poem or build a game",'
+                            '"tool":"logical_reasoning","complexity":"high"}]}'
+                        )
+                    }
+                }
+            ]
+        },
+        {
+            "choices": [
+                {
+                    "message": {
+                        "content": (
+                            '{"split": false, "prompts": [{"prompt":"write a poem or build a game",'
+                            '"tool":"logical_reasoning","complexity":"high"}]}'
+                        )
+                    }
+                }
+            ]
+        },
+    ]
+
+    def fake_client_factory(*args, **kwargs):
+        return FakeAsyncClient(responses=responses, calls=calls, timeout=kwargs.get("timeout", 0))
+
+    monkeypatch.setattr(httpx, "AsyncClient", fake_client_factory)
+
+    client = SLMTaskClient(api_url="http://localhost:8001/v1/chat/completions")
+    result = asyncio.run(client.analyze("write a poem or build a game", "s5"))
+
+    assert result.split is True
+    assert len(result.prompts) == 2
