@@ -21,7 +21,12 @@ try:
     stdin, stdout, stderr = client.exec_command("cd star-router && if [ -f router.pid ]; then kill $(cat router.pid); rm router.pid; fi")
     stdout.channel.recv_exit_status()
     
-    stdin, stdout, stderr = client.exec_command("cd star-router && nohup /usr/bin/python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8080 > router.log 2>&1 & echo $! > router.pid")
+    # Install new dependencies explicitly
+    stdin, stdout, stderr = client.exec_command("cd star-router && /usr/bin/python3 -m pip install openai anthropic")
+    stdout.channel.recv_exit_status()
+    
+    # Ensure export from .env works
+    stdin, stdout, stderr = client.exec_command("cd star-router && set -a && [ -f .env ] && source .env && set +a && nohup /usr/bin/python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8080 > router.log 2>&1 & echo $! > router.pid")
     stdout.channel.recv_exit_status()
     
     scp.close()

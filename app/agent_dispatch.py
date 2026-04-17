@@ -1,5 +1,6 @@
 import asyncio
-import httpx
+from openai import AsyncOpenAI
+from anthropic import AsyncAnthropic
 from typing import Any, Dict
 
 from app.models import SLMTaskAnalysis, ALLOWED_TOOLS
@@ -56,23 +57,17 @@ async def _call_openai(model: str, prompt: str) -> str:
     if not api_key:
         return f"[Error: openai_api_key not configured for model {model}]"
         
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json"
-    }
-    payload = {
-        "model": model,
-        "messages": [{"role": "user", "content": prompt}]
-    }
+    client = AsyncOpenAI(api_key=api_key)
     
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            resp = await client.post("https://api.openai.com/v1/chat/completions", json=payload, headers=headers)
-            resp.raise_for_status()
-            data = resp.json()
-            return data["choices"][0]["message"]["content"]
+        response = await client.chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": prompt}],
+            timeout=30.0
+        )
+        return response.choices[0].message.content
     except Exception as e:
-        return f"[Error calling OpenAI API: {str(e)}]"
+        return f"[Error calling OpenAI SDK: {str(e)}]"
 
 async def _call_anthropic(model: str, prompt: str) -> str:
     settings = get_settings()
@@ -80,25 +75,18 @@ async def _call_anthropic(model: str, prompt: str) -> str:
     if not api_key:
         return f"[Error: anthropic_api_key not configured for model {model}]"
         
-    headers = {
-        "x-api-key": api_key,
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json"
-    }
-    payload = {
-        "model": model,
-        "max_tokens": 1024,
-        "messages": [{"role": "user", "content": prompt}]
-    }
+    client = AsyncAnthropic(api_key=api_key)
     
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            resp = await client.post("https://api.anthropic.com/v1/messages", json=payload, headers=headers)
-            resp.raise_for_status()
-            data = resp.json()
-            return data["content"][0]["text"]
+        response = await client.messages.create(
+            model=model,
+            max_tokens=1024,
+            messages=[{"role": "user", "content": prompt}],
+            timeout=30.0
+        )
+        return response.content[0].text
     except Exception as e:
-        return f"[Error calling Anthropic API: {str(e)}]"
+        return f"[Error calling Anthropic SDK: {str(e)}]"
 
 async def _execute_task(task: Dict[str, Any]) -> Dict[str, Any]:
     model = task["assigned_model"]
