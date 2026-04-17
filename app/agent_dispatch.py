@@ -79,9 +79,21 @@ async def _call_openai(model: str, prompt: str) -> str:
             top_p=1,
             store=True,
             include=["web_search_call.action.sources"],
-            timeout=30.0
         )
-        return response.output_text
+        # Inspect response if output_text is missing
+        try:
+            return response.output_text
+        except AttributeError:
+            # Fallback for different SDK versions or structured output
+            outputitems = getattr(response, "output", [])
+            for item in outputitems:
+                if hasattr(item, "content"):
+                    for content_part in item.content:
+                        if hasattr(content_part, "text"):
+                            return content_part.text
+            
+            # Final fallback: dump the whole thing to see what's inside
+            return f"[Error: Responses API returned unexpected structure. Available fields: {list(response.__dict__.keys())}]"
     except Exception as e:
         return f"[Error calling OpenAI Responses API: {str(e)}]"
 
