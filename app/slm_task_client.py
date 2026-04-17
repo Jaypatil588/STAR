@@ -31,8 +31,6 @@ SCHEMA:
   ]
 }}
 
-EXAMPLES:
-
 User: What is 2 + 2?
 Output: {{"split": false, "prompts": [{{"prompt": "What is 2 + 2?", "tool": "math_compute", "complexity": "low"}}]}}
 
@@ -62,7 +60,41 @@ Output: {{"split": true, "prompts": [{{"prompt": "Write a python script to downl
 
 User: Delete all files in the current folder.
 Output: {{"split": false, "prompts": [{{"prompt": "Delete all files in the current folder.", "tool": "terminal_execution", "complexity": "high"}}]}}
+
+User: Write an epic fantasy story about a wizard AND write Python code for a spell-casting simulator.
+Output: {{"split": true, "prompts": [{{"prompt": "Write an epic fantasy story about a wizard", "tool": "creative_writing", "complexity": "high"}}, {{"prompt": "Write Python code for a spell-casting simulator", "tool": "code_generation", "complexity": "high"}}]}}
+
+User: Write a short poem about the ocean and also write a JavaScript function to detect ocean tide patterns.
+Output: {{"split": true, "prompts": [{{"prompt": "Write a short poem about the ocean", "tool": "creative_writing", "complexity": "low"}}, {{"prompt": "Write a JavaScript function to detect ocean tide patterns", "tool": "code_generation", "complexity": "high"}}]}}
+
+User: Create a compelling product description for a smartwatch and write the REST API endpoint code to fetch its live data.
+Output: {{"split": true, "prompts": [{{"prompt": "Create a compelling product description for a smartwatch", "tool": "creative_writing", "complexity": "low"}}, {{"prompt": "Write the REST API endpoint code to fetch live smartwatch data", "tool": "code_generation", "complexity": "high"}}]}}
+
+User: Write a blog post about machine learning trends and then implement a neural network in Python from scratch.
+Output: {{"split": true, "prompts": [{{"prompt": "Write a blog post about machine learning trends", "tool": "creative_writing", "complexity": "high"}}, {{"prompt": "Implement a neural network in Python from scratch", "tool": "code_generation", "complexity": "high"}}]}}
+
+User: Tell me an engaging sci-fi story about AI and write the code for an AI chatbot using Python.
+Output: {{"split": true, "prompts": [{{"prompt": "Tell me an engaging sci-fi story about AI", "tool": "creative_writing", "complexity": "high"}}, {{"prompt": "Write the code for an AI chatbot using Python", "tool": "code_generation", "complexity": "high"}}]}}
+
+User: Write a haiku about autumn leaves and compute the Fibonacci sequence up to 1000.
+Output: {{"split": true, "prompts": [{{"prompt": "Write a haiku about autumn leaves", "tool": "creative_writing", "complexity": "low"}}, {{"prompt": "Compute the Fibonacci sequence up to 1000", "tool": "math_compute", "complexity": "low"}}]}}
+
+User: Analyze the sales data from Q3 and generate a chart-ready summary, then write a Python script to automate this report monthly.
+Output: {{"split": true, "prompts": [{{"prompt": "Analyze the sales data from Q3 and generate a chart-ready summary", "tool": "data_analysis", "complexity": "high"}}, {{"prompt": "Write a Python script to automate this monthly sales report", "tool": "code_generation", "complexity": "high"}}]}}
+
+User: Translate the following English paragraph to Spanish and then check if the translation is grammatically accurate.
+Output: {{"split": true, "prompts": [{{"prompt": "Translate the English paragraph to Spanish", "tool": "translation", "complexity": "low"}}, {{"prompt": "Check if the Spanish translation is grammatically accurate", "tool": "fact_check", "complexity": "low"}}]}}
+
+User: Search the web for the latest GPT-5 release notes and summarize what changed.
+Output: {{"split": true, "prompts": [{{"prompt": "Search the web for the latest GPT-5 release notes", "tool": "web_search", "complexity": "low"}}, {{"prompt": "Summarize the key changes in the GPT-5 release", "tool": "summarization", "complexity": "low"}}]}}
+
+User: Write a fantasy story about a dragon and compute the volume of a sphere with radius 7.
+Output: {{"split": true, "prompts": [{{"prompt": "Write a fantasy story about a dragon", "tool": "creative_writing", "complexity": "high"}}, {{"prompt": "Compute the volume of a sphere with radius 7", "tool": "math_compute", "complexity": "low"}}]}}
+
+User: Write a marketing email for our new product launch and implement the email sending backend in Python using SMTP.
+Output: {{"split": true, "prompts": [{{"prompt": "Write a marketing email for the new product launch", "tool": "creative_writing", "complexity": "low"}}, {{"prompt": "Implement an email sending backend in Python using SMTP", "tool": "code_generation", "complexity": "high"}}]}}
 """
+
 
 class SLMTaskClient:
     def __init__(self, api_url: str, timeout_ms: int = 15_000):
