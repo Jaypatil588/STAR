@@ -1,11 +1,60 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any, Dict, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
 from app.constants import COMPLEX_MODEL_KEY, SIMPLE_MODEL_KEY
+
+# ---------------------------------------------------------------------------
+# Tool catalogue — SLM must pick strictly from this list
+# ---------------------------------------------------------------------------
+ToolCategory = Literal[
+    "math_compute",
+    "logical_reasoning",
+    "data_analysis",
+    "code_generation",
+    "code_review",
+    "code_translation",
+    "web_search",
+    "internal_rag",
+    "fact_check",
+    "summarization",
+    "translation",
+    "creative_writing",
+    "copy_editing",
+    "entity_extraction",
+    "image_generation",
+    "vision_analysis",
+    "audio_processing",
+    "dom_manipulation",
+    "terminal_execution",
+    "api_call",
+]
+
+ALLOWED_TOOLS: List[str] = [
+    "math_compute",
+    "logical_reasoning",
+    "data_analysis",
+    "code_generation",
+    "code_review",
+    "code_translation",
+    "web_search",
+    "internal_rag",
+    "fact_check",
+    "summarization",
+    "translation",
+    "creative_writing",
+    "copy_editing",
+    "entity_extraction",
+    "image_generation",
+    "vision_analysis",
+    "audio_processing",
+    "dom_manipulation",
+    "terminal_execution",
+    "api_call",
+]
 
 
 def utc_now() -> datetime:
@@ -130,3 +179,37 @@ class SessionState(BaseModel):
     created_at: datetime = Field(default_factory=utc_now)
     last_used_at: datetime = Field(default_factory=utc_now)
     last_decision: Literal["continue", "switch"] = "continue"
+
+
+# ---------------------------------------------------------------------------
+# SLM Task-Analysis models  (used by /v1/clean)
+# ---------------------------------------------------------------------------
+
+class TaskPrompt(BaseModel):
+    """A single sub-task extracted by the SLM analyzer."""
+
+    prompt: str = Field(min_length=1, description="The sub-task prompt text")
+    tool: ToolCategory = Field(description="Tool category strictly from ALLOWED_TOOLS")
+    complexity: Literal["high", "low"] = Field(
+        description="Task complexity — 'high' or 'low'"
+    )
+
+
+class SLMTaskAnalysis(BaseModel):
+    """Strict schema the SLM must return for every request."""
+
+    split: bool = Field(
+        description="True if the prompt was split into multiple sub-tasks, False otherwise"
+    )
+    prompts: List[TaskPrompt] = Field(
+        min_length=1,
+        description="List of sub-task objects; exactly one element when split=false",
+    )
+
+
+class CleanRequest(BaseModel):
+    """Request body arriving from PIL after security screening."""
+
+    prompt: str = Field(min_length=1, description="Security-screened user prompt")
+    session_id: str = Field(min_length=1)
+    request_id: Optional[str] = None

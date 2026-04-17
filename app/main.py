@@ -14,10 +14,16 @@ from app.clients import (
     RollingSummarizerService,
 )
 from app.config import get_settings
-from app.models import GPT4OModelRequest, RouteModelRequest, RouteRequest
 from app.router_service import RouterService
 from app.session_store import InMemorySessionStore
-from app.pii_service import PIIService
+from app.slm_task_client import SLMTaskClient
+from app.agent_dispatch import callAgents
+from app.models import (
+    GPT4OModelRequest,
+    RouteModelRequest,
+    RouteRequest,
+    CleanRequest,
+)
 
 
 def create_app(router_service: Optional[RouterService] = None) -> FastAPI:
@@ -71,21 +77,34 @@ def create_app(router_service: Optional[RouterService] = None) -> FastAPI:
     app = FastAPI(title="STAR Router", version="0.1.0")
     app.state.endpoint_caller = endpoint_caller
     app.state.gpt4o_client = gpt4o_client
-    app.state.pii_service = PIIService()
+    app.state.slm_task_client = SLMTaskClient(
+        api_url=settings.slm_task_api_url,
+        timeout_ms=settings.slm_task_timeout_ms,
+    )
 
     @app.get("/health")
     async def health() -> dict[str, str]:
         return {"status": "ok"}
 
     @app.post("/v1/clean")
-    async def clean_prompt(request: RouteRequest) -> dict:
+    async def clean_prompt(request: CleanRequest) -> dict:
         request_id = request.request_id or str(uuid4())
         try:
-            cleaned_prompt = app.state.pii_service.clean_text(request.prompt)
+            # 1. Call SLM for task analysis
+            task_analysis = await app.state.slm_task_client.analyze(
+                prompt=request.prompt,
+                session_id=request.session_id,
+            )
+            
+            # 2. Pass to agent dispatch
+            agent_result = await callAgents(task_analysis)
+            
             return {
                 "request_id": request_id,
                 "session_id": request.session_id,
-                "cleaned_prompt": cleaned_prompt,
+                "original_prompt": request.prompt,
+                "task_analysis": task_analysis.model_dump(),
+                "agent_result": agent_result,
                 "status": "success",
             }
         except Exception as exc:

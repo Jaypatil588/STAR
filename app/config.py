@@ -14,6 +14,8 @@ class Settings(BaseModel):
     placeholder_api_url: str = Field(default="http://localhost:8002/respond")
     placeholder_api_key: Optional[str] = Field(default=None)
     slm_timeout_ms: int = Field(default=4_000)
+    slm_task_api_url: str = Field(default="http://192.168.50.218:8001/v1/completions")
+    slm_task_timeout_ms: int = Field(default=15_000)
     downstream_timeout_ms: int = Field(default=4_000)
     downstream_provider: str = Field(default="http")
     openai_api_key: Optional[str] = Field(default=None)
@@ -32,6 +34,8 @@ class Settings(BaseModel):
             ),
             placeholder_api_key=os.getenv("PLACEHOLDER_API_KEY"),
             slm_timeout_ms=int(os.getenv("SLM_TIMEOUT_MS", "4000")),
+            slm_task_api_url=os.getenv("SLM_TASK_API_URL", "http://192.168.50.218:8001/v1/completions"),
+            slm_task_timeout_ms=int(os.getenv("SLM_TASK_TIMEOUT_MS", "15000")),
             downstream_timeout_ms=int(os.getenv("DOWNSTREAM_TIMEOUT_MS", "4000")),
             downstream_provider=os.getenv("DOWNSTREAM_PROVIDER", "http").lower(),
             openai_api_key=os.getenv("OPENAI_API_KEY"),
