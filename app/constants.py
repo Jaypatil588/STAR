@@ -1,0 +1,4 @@
+COMPLEX_MODEL_KEY = "complex_default_v1"
+SIMPLE_MODEL_KEY = "simple_default_v1"
+
+MODEL_KEYS = {COMPLEX_MODEL_KEY, SIMPLE_MODEL_KEY}
