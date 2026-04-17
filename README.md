@@ -4,7 +4,7 @@ FastAPI service that:
 - Accepts `prompt + session_id`
 - Calls SLM on every request
 - Supports explicit endpoint chaining:
-- `POST /v1/star` -> `POST /v1/routeModel` -> `POST /v1/models/gpt4o`
+- `POST /v1/star` -> `POST /v1/pil-clean` -> `POST /v1/clean` -> QWEN
 - Returns a fixed decision response at each stage plus the next-stage response
 
 ## Run
@@ -15,7 +15,9 @@ uvicorn app.main:app --reload
 
 ## Endpoints
 
-- `POST /v1/star`: prompt + session, runs SLM decision, forwards to `/v1/routeModel`
+- `POST /v1/star`: prompt + session, forwards to `/v1/pil-clean`
+- `POST /v1/pil-clean`: prompt cleaning layer, forwards to `/v1/clean`
+- `POST /v1/clean`: calls QWEN task analyzer and agent dispatch stub
 - `POST /v1/routeModel`: central routing hub with `modelID`, `prompt`, optional `context`
 - `POST /v1/models/gpt4o`: calls GPT-4o using `modelID`, `prompt`, optional `context`
 - `POST /v1/slm-route`: stage-1 only legacy helper

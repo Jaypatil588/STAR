@@ -20,6 +20,7 @@ from app.slm_task_client import SLMTaskClient
 from app.agent_dispatch import callAgents
 from app.models import (
     GPT4OModelRequest,
+    PILCleanRequest,
     RouteModelRequest,
     RouteRequest,
     CleanRequest,
@@ -102,67 +103,90 @@ def create_app(router_service: Optional[RouterService] = None) -> FastAPI:
             return {
                 "request_id": request_id,
                 "session_id": request.session_id,
+                "fixed_response": {
+                    "stage": "clean",
+                    "decision": "call_qwen_task_analyzer",
+                    "target": settings.slm_task_api_url,
+                },
                 "original_prompt": request.prompt,
                 "task_analysis": task_analysis.model_dump(),
                 "agent_result": agent_result,
+                "final_response": task_analysis.model_dump(),
                 "status": "success",
             }
         except Exception as exc:
             return {
                 "request_id": request_id,
                 "session_id": request.session_id,
+                "fixed_response": {
+                    "stage": "clean",
+                    "decision": "call_qwen_task_analyzer",
+                    "target": settings.slm_task_api_url,
+                },
                 "error": str(exc),
                 "status": "error",
             }
 
+    @app.post("/v1/pil-clean")
+    async def pil_clean(request: PILCleanRequest) -> dict:
+        request_id = request.request_id or str(uuid4())
+        cleaned_prompt = _pil_clean_text(request.prompt)
+        fixed_response = {
+            "stage": "pil_clean",
+            "decision": "clean_prompt_and_forward",
+            "next_endpoint": "/v1/clean",
+        }
+        clean_payload = {
+            "request_id": request_id,
+            "session_id": request.session_id,
+            "prompt": cleaned_prompt,
+        }
+        try:
+            clean_response = await app.state.endpoint_caller.post("/v1/clean", clean_payload)
+            final_status = clean_response.get("status", "success")
+        except Exception as exc:
+            clean_response = {"status": "error", "error": str(exc)}
+            final_status = "error"
+        return {
+            "request_id": request_id,
+            "session_id": request.session_id,
+            "original_prompt": request.prompt,
+            "cleaned_prompt": cleaned_prompt,
+            "fixed_response": fixed_response,
+            "clean_response": clean_response,
+            "final_response": clean_response.get("final_response"),
+            "status": final_status,
+        }
+
     @app.post("/v1/star")
     async def star(request: RouteRequest) -> dict:
         request_id = request.request_id or str(uuid4())
-        stage_1 = await router_service.slm_route_only(
-            RouteRequest(
-                prompt=request.prompt,
-                session_id=request.session_id,
-                context=request.context,
-                user_id=request.user_id,
-                request_id=request_id,
-                constraints=request.constraints,
-                debug=request.debug,
-            )
-        )
-        response_1 = stage_1["response_1"]
-        selected_model_key = str(response_1["selected_model_key"])
-        model_id = _map_model_key_to_model_id(selected_model_key)
-
         fixed_response = {
             "stage": "star",
-            "decision": "slm_selected_model",
-            "modelID": model_id,
-            "next_endpoint": "/v1/routeModel",
+            "decision": "forward_to_pil_clean",
+            "next_endpoint": "/v1/pil-clean",
         }
-        route_model_payload = {
+        pil_payload = {
             "request_id": request_id,
             "session_id": request.session_id,
-            "modelID": model_id,
             "prompt": request.prompt,
             "context": request.context,
-            "routing_metadata": response_1,
         }
         try:
-            route_model_response = await app.state.endpoint_caller.post(
-                "/v1/routeModel", route_model_payload
+            pil_response = await app.state.endpoint_caller.post(
+                "/v1/pil-clean", pil_payload
             )
-            final_status = route_model_response.get("status", "success")
+            final_status = pil_response.get("status", "success")
         except Exception as exc:
-            route_model_response = {"final_response": {"error": str(exc)}, "status": "error"}
+            pil_response = {"status": "error", "error": str(exc)}
             final_status = "error"
         return {
             "request_id": request_id,
             "session_id": request.session_id,
             "input_prompt": request.prompt,
             "fixed_response": fixed_response,
-            "response_1": response_1,
-            "routeModel_response": route_model_response,
-            "final_response": route_model_response.get("final_response"),
+            "pil_clean_response": pil_response,
+            "final_response": pil_response.get("final_response"),
             "status": final_status,
         }
 
@@ -288,6 +312,11 @@ def _context_to_summary(context: Optional[Dict[str, Any]]) -> str:
         return "none"
     parts = ["{0}={1}".format(k, context[k]) for k in sorted(context.keys())]
     return "; ".join(parts)
+
+
+def _pil_clean_text(prompt: str) -> str:
+    cleaned = " ".join(prompt.strip().split())
+    return cleaned
 
 
 app = create_app()

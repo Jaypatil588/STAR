@@ -88,6 +88,13 @@ class GPT4OModelRequest(BaseModel):
     context: Optional[Dict[str, Any]] = None
 
 
+class PILCleanRequest(BaseModel):
+    prompt: str = Field(min_length=1)
+    session_id: str = Field(min_length=1)
+    request_id: Optional[str] = None
+    context: Optional[Dict[str, Any]] = None
+
+
 class SLMRoutingInput(BaseModel):
     prompt: str
     session_id: str
