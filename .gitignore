@@ -1,3 +1,6 @@
 __pycache__/
 .pytest_cache/
 *.pyc
+.env
+push_env.py
+check_remote.py

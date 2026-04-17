@@ -37,18 +37,18 @@ def resolve_model_for_task(tool: str, complexity: str) -> str:
     
     # Group 2: Instructions, RAG, & Text
     if tool in TEXT_GROUP:
-        return "gpt-5.4" if complexity == "high" else "gpt-5.4-nano"
+        return "gpt-4o" if complexity == "high" else "gpt-4o-mini"
         
     # Group 3: Math, Logic, & Data
     if tool in REASONING_GROUP:
-        return "gpt-5.4" if complexity == "high" else "claude-sonnet-4.6"
+        return "gpt-4o" if complexity == "high" else "claude-sonnet-4.6"
         
     # Group 4: Vision & Audio Processing
     if tool in MULTIMODAL_GROUP:
-        return "gpt-5.4" if complexity == "high" else "gpt-5.4-nano"
+        return "gpt-4o" if complexity == "high" else "gpt-4o-mini"
         
     # Fallback default
-    return "gpt-5.4-nano"
+    return "gpt-4o-mini"
 
 
 async def _call_openai(model: str, prompt: str) -> str:
@@ -60,14 +60,30 @@ async def _call_openai(model: str, prompt: str) -> str:
     client = AsyncOpenAI(api_key=api_key)
     
     try:
-        response = await client.chat.completions.create(
+        # Using the specialized Responses API as requested
+        response = await client.responses.create(
             model=model,
-            messages=[{"role": "user", "content": prompt}],
+            input=[{
+                "role": "user",
+                "content": [{"type": "input_text", "text": prompt}]
+            }],
+            text={
+                "format": {
+                    "type": "text"
+                }
+            },
+            reasoning={},
+            tools=[],
+            temperature=1,
+            max_output_tokens=2048,
+            top_p=1,
+            store=True,
+            include=["web_search_call.action.sources"],
             timeout=30.0
         )
-        return response.choices[0].message.content
+        return response.output_text
     except Exception as e:
-        return f"[Error calling OpenAI SDK: {str(e)}]"
+        return f"[Error calling OpenAI Responses API: {str(e)}]"
 
 async def _call_anthropic(model: str, prompt: str) -> str:
     settings = get_settings()

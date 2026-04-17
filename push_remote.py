@@ -22,7 +22,7 @@ try:
     stdout.channel.recv_exit_status()
     
     # Install new dependencies explicitly
-    stdin, stdout, stderr = client.exec_command("cd star-router && /usr/bin/python3 -m pip install openai anthropic")
+    stdin, stdout, stderr = client.exec_command("cd star-router && /usr/bin/python3 -m pip install --upgrade openai anthropic")
     stdout.channel.recv_exit_status()
     
     # Ensure export from .env works
