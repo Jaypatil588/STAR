@@ -23,6 +23,24 @@ class SummarizerService(Protocol):
         ...
 
 
+class EndpointCaller(Protocol):
+    async def post(self, path: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+        ...
+
+
+class InternalEndpointHTTPCaller:
+    def __init__(self, base_url: str, timeout_ms: int = 15_000) -> None:
+        self._base_url = base_url.rstrip("/")
+        self._timeout = timeout_ms / 1_000
+
+    async def post(self, path: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+        url = "{0}/{1}".format(self._base_url, path.lstrip("/"))
+        async with httpx.AsyncClient(timeout=self._timeout) as client:
+            response = await client.post(url, json=payload)
+            response.raise_for_status()
+            return response.json()
+
+
 class RemoteSLMClient:
     def __init__(self, api_url: str, api_key: Optional[str] = None, timeout_ms: int = 4_000) -> None:
         self._api_url = api_url

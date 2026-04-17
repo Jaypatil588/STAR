@@ -3,12 +3,9 @@
 FastAPI service that:
 - Accepts `prompt + session_id`
 - Calls SLM on every request
-- Routes first to a placeholder downstream target
-- Summarizes context after routing
-- Persists rolling per-session context in memory
-- Returns two explicit stages:
-- `response_1`: SLM routing decision (`model_id` + routing metadata)
-- `response_2`: model execution result from the selected model
+- Supports explicit endpoint chaining:
+- `POST /v1/star` -> `POST /v1/routeModel` -> `POST /v1/models/gpt4o`
+- Returns a fixed decision response at each stage plus the next-stage response
 
 ## Run
 
@@ -18,8 +15,11 @@ uvicorn app.main:app --reload
 
 ## Endpoints
 
-- `POST /v1/slm-route`: stage-1 only (SLM routing response)
-- `POST /v1/route`: full flow (stage-1 routing + stage-2 model response)
+- `POST /v1/star`: prompt + session, runs SLM decision, forwards to `/v1/routeModel`
+- `POST /v1/routeModel`: central routing hub with `modelID`, `prompt`, optional `context`
+- `POST /v1/models/gpt4o`: calls GPT-4o using `modelID`, `prompt`, optional `context`
+- `POST /v1/slm-route`: stage-1 only legacy helper
+- `POST /v1/route`: legacy combined orchestrator response
 - `GET /health`
 
 ## Environment
@@ -39,6 +39,7 @@ Current key vars:
 - `SLM_API_KEY`
 - `PLACEHOLDER_API_KEY`
 - `OPENAI_API_KEY`
+- `INTERNAL_BASE_URL` (used for internal endpoint-to-endpoint calls)
 
 ## Test
 

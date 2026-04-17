@@ -22,6 +22,23 @@ class RouteRequest(BaseModel):
     debug: bool = False
 
 
+class RouteModelRequest(BaseModel):
+    modelID: str = Field(min_length=1)
+    prompt: str = Field(min_length=1)
+    session_id: str = Field(min_length=1)
+    request_id: Optional[str] = None
+    context: Optional[Dict[str, Any]] = None
+    routing_metadata: Optional[Dict[str, Any]] = None
+
+
+class GPT4OModelRequest(BaseModel):
+    modelID: str = Field(min_length=1)
+    prompt: str = Field(min_length=1)
+    session_id: str = Field(min_length=1)
+    request_id: Optional[str] = None
+    context: Optional[Dict[str, Any]] = None
+
+
 class SLMRoutingInput(BaseModel):
     prompt: str
     session_id: str
