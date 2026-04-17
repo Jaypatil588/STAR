@@ -13,6 +13,24 @@ FastAPI service that:
 uvicorn app.main:app --reload
 ```
 
+## Environment
+
+Default downstream mode is HTTP placeholder (`DOWNSTREAM_PROVIDER=http`).
+
+To use OpenAI as downstream:
+
+```bash
+export DOWNSTREAM_PROVIDER=openai
+export OPENAI_API_KEY=...
+export OPENAI_MODEL=gpt-4o
+uvicorn app.main:app --host 0.0.0.0 --port 8080
+```
+
+Current key vars:
+- `SLM_API_KEY`
+- `PLACEHOLDER_API_KEY`
+- `OPENAI_API_KEY`
+
 ## Test
 
 ```bash

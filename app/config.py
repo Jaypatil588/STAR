@@ -15,6 +15,10 @@ class Settings(BaseModel):
     placeholder_api_key: Optional[str] = Field(default=None)
     slm_timeout_ms: int = Field(default=4_000)
     downstream_timeout_ms: int = Field(default=4_000)
+    downstream_provider: str = Field(default="http")
+    openai_api_key: Optional[str] = Field(default=None)
+    openai_model: str = Field(default="gpt-4o")
+    openai_base_url: str = Field(default="https://api.openai.com/v1/responses")
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -27,6 +31,12 @@ class Settings(BaseModel):
             placeholder_api_key=os.getenv("PLACEHOLDER_API_KEY"),
             slm_timeout_ms=int(os.getenv("SLM_TIMEOUT_MS", "4000")),
             downstream_timeout_ms=int(os.getenv("DOWNSTREAM_TIMEOUT_MS", "4000")),
+            downstream_provider=os.getenv("DOWNSTREAM_PROVIDER", "http").lower(),
+            openai_api_key=os.getenv("OPENAI_API_KEY"),
+            openai_model=os.getenv("OPENAI_MODEL", "gpt-4o"),
+            openai_base_url=os.getenv(
+                "OPENAI_BASE_URL", "https://api.openai.com/v1/responses"
+            ),
         )
 
 
