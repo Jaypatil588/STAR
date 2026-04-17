@@ -14,8 +14,13 @@ class Settings(BaseModel):
     placeholder_api_url: str = Field(default="http://localhost:8002/respond")
     placeholder_api_key: Optional[str] = Field(default=None)
     slm_timeout_ms: int = Field(default=4_000)
-    slm_task_api_url: str = Field(default="http://192.168.50.218:8001/v1/completions")
+    slm_task_api_url: str = Field(default="http://192.168.50.218:8001/v1/chat/completions")
     slm_task_timeout_ms: int = Field(default=15_000)
+    slm_task_model: str = Field(default="Qwen3.5-0.8B")
+    slm_task_temperature: float = Field(default=0.1)
+    slm_task_top_p: float = Field(default=0.8)
+    slm_task_max_tokens: int = Field(default=1024)
+    slm_task_enable_thinking: bool = Field(default=False)
     downstream_timeout_ms: int = Field(default=4_000)
     downstream_provider: str = Field(default="http")
     openai_api_key: Optional[str] = Field(default=None)
@@ -35,8 +40,18 @@ class Settings(BaseModel):
             ),
             placeholder_api_key=os.getenv("PLACEHOLDER_API_KEY"),
             slm_timeout_ms=int(os.getenv("SLM_TIMEOUT_MS", "4000")),
-            slm_task_api_url=os.getenv("SLM_TASK_API_URL", "http://192.168.50.218:8001/v1/completions"),
+            slm_task_api_url=os.getenv(
+                "SLM_TASK_API_URL", "http://192.168.50.218:8001/v1/chat/completions"
+            ),
             slm_task_timeout_ms=int(os.getenv("SLM_TASK_TIMEOUT_MS", "15000")),
+            slm_task_model=os.getenv("SLM_TASK_MODEL", "Qwen3.5-0.8B"),
+            slm_task_temperature=float(os.getenv("SLM_TASK_TEMPERATURE", "0.1")),
+            slm_task_top_p=float(os.getenv("SLM_TASK_TOP_P", "0.8")),
+            slm_task_max_tokens=int(os.getenv("SLM_TASK_MAX_TOKENS", "1024")),
+            slm_task_enable_thinking=os.getenv(
+                "SLM_TASK_ENABLE_THINKING", "false"
+            ).lower()
+            in {"1", "true", "yes"},
             downstream_timeout_ms=int(os.getenv("DOWNSTREAM_TIMEOUT_MS", "4000")),
             downstream_provider=os.getenv("DOWNSTREAM_PROVIDER", "http").lower(),
             openai_api_key=os.getenv("OPENAI_API_KEY"),

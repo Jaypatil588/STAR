@@ -1,0 +1,12 @@
+{"prompt":"What is the capital of Spain?","expected_split":false}
+{"prompt":"Translate this sentence to French.","expected_split":false}
+{"prompt":"Summarize this article in 3 bullets.","expected_split":false}
+{"prompt":"Write Python code to parse CSV.","expected_split":false}
+{"prompt":"Search latest AI news and summarize findings.","expected_split":true}
+{"prompt":"Translate this paragraph and fix grammar errors.","expected_split":true}
+{"prompt":"Write a poem about rain and create a JavaScript function for random color.","expected_split":true}
+{"prompt":"Analyze Q3 sales data then generate a monthly automation script.","expected_split":true}
+{"prompt":"Explain TLS briefly.","expected_split":false}
+{"prompt":"Generate a product description and write API code for inventory sync.","expected_split":true}
+{"prompt":"Compute 22*17.","expected_split":false}
+{"prompt":"Extract entities from this text and fact-check each claim.","expected_split":true}

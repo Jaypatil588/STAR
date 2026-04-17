@@ -38,7 +38,13 @@ class InternalEndpointHTTPCaller:
         async with httpx.AsyncClient(timeout=self._timeout) as client:
             response = await client.post(url, json=payload)
             response.raise_for_status()
+            content_type = response.headers.get("content-type", "")
+            if "text/plain" in content_type:
+                # Streaming plain-text response — collect the full body and
+                # wrap it so callers can display it uniformly.
+                return {"status": "success", "output": response.text}
             return response.json()
+
 
 
 class RemoteSLMClient:

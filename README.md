@@ -42,9 +42,28 @@ Current key vars:
 - `PLACEHOLDER_API_KEY`
 - `OPENAI_API_KEY`
 - `INTERNAL_BASE_URL` (used for internal endpoint-to-endpoint calls)
+- `SLM_TASK_API_URL` (use `/v1/chat/completions` for Qwen split tasking)
+- `SLM_TASK_MODEL`
+- `SLM_TASK_TEMPERATURE`
+- `SLM_TASK_TOP_P`
+- `SLM_TASK_MAX_TOKENS`
+- `SLM_TASK_ENABLE_THINKING` (set `false` for deterministic non-thinking classification)
 
 ## Test
 
 ```bash
 pytest
+```
+
+## Split Evaluation
+
+Run labeled split evaluation against your Qwen endpoint:
+
+```bash
+python3 scripts/eval_split.py \
+  --dataset tests/data/split_eval_sample.jsonl \
+  --api-url http://192.168.50.218:8001/v1/chat/completions \
+  --model Qwen3.5-0.8B \
+  --temperature 0.1 \
+  --top-p 0.8
 ```

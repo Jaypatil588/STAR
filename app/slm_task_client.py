@@ -1,147 +1,163 @@
 from __future__ import annotations
 
 import json
-from typing import AsyncGenerator, Dict, Any, Optional
-import httpx
 import logging
+from typing import Any, Dict, Optional
 
-from app.models import SLMTaskAnalysis, ALLOWED_TOOLS
+import httpx
+
+from app.models import SLMTaskAnalysis
 
 logger = logging.getLogger(__name__)
 
-SYSTEM_PROMPT = """You are a strict task analysis engine. Given a user prompt, you must:
-1. Decide if the prompt should be split into multiple sub-tasks (split: true/false).
-2. For each sub-task, output its prompt, tool, and complexity.
+SYSTEM_PROMPT = """You are a strict task-analysis engine.
 
-STRICT RULES:
-- For each sub-task, you must assign a category strictly from the following allowed list. Do not use any category outside of this list:
-[math_compute, logical_reasoning, data_analysis, code_generation, code_review, code_translation, web_search, internal_rag, fact_check, summarization, translation, creative_writing, copy_editing, entity_extraction, image_generation, vision_analysis, audio_processing, dom_manipulation, terminal_execution, api_call]
-- complexity MUST be "high" or "low"
-- DO NOT wrap the output in markdown code blocks like ```json ... ```. Just return the raw JSON string.
-
-SCHEMA:
-{{
+Your job:
+1) Decide whether the user prompt should be split into multiple actionable tasks.
+2) Return strict JSON only with this exact schema:
+{
   "split": boolean,
   "prompts": [
-    {{
+    {
       "prompt": string,
       "tool": string,
-      "complexity": string
-    }}
+      "complexity": "high" | "low"
+    }
   ]
-}}
+}
 
-User: What is 2 + 2?
-Output: {{"split": false, "prompts": [{{"prompt": "What is 2 + 2?", "tool": "math_compute", "complexity": "low"}}]}}
+Hard rules:
+- Return ONLY raw JSON (no markdown fences, no extra text).
+- Set split=true whenever the request contains two or more actionable intents.
+- Each prompt must be actionable and atomic.
+- "tool" must be one of:
+[math_compute, logical_reasoning, data_analysis, code_generation, code_review, code_translation, web_search, internal_rag, fact_check, summarization, translation, creative_writing, copy_editing, entity_extraction, image_generation, vision_analysis, audio_processing, dom_manipulation, terminal_execution, api_call]
+- complexity must be exactly "high" or "low".
 
-User: Write a python script to parse a CSV and then summarize the key findings.
-Output: {{"split": true, "prompts": [{{"prompt": "Write a python script to parse a CSV", "tool": "code_generation", "complexity": "high"}}, {{"prompt": "Summarize the key findings from the parsed CSV", "tool": "summarization", "complexity": "low"}}]}}
+Examples:
+User: "What is 2 + 2?"
+Output: {"split": false, "prompts": [{"prompt":"What is 2 + 2?","tool":"math_compute","complexity":"low"}]}
 
-User: Translate this text to french and fix any grammar errors.
-Output: {{"split": true, "prompts": [{{"prompt": "Translate this text to french", "tool": "translation", "complexity": "low"}}, {{"prompt": "Fix any grammar errors in the translated text", "tool": "copy_editing", "complexity": "low"}}]}}
+User: "Write python to parse CSV and summarize insights."
+Output: {"split": true, "prompts": [{"prompt":"Write Python to parse a CSV file","tool":"code_generation","complexity":"high"},{"prompt":"Summarize insights from parsed CSV data","tool":"summarization","complexity":"low"}]}
 
-User: Analyze this image and extract the text.
-Output: {{"split": true, "prompts": [{{"prompt": "Analyze this image", "tool": "vision_analysis", "complexity": "high"}}, {{"prompt": "Extract the text from the image", "tool": "entity_extraction", "complexity": "low"}}]}}
-
-User: Search the web for latest AI news.
-Output: {{"split": false, "prompts": [{{"prompt": "Search the web for latest AI news", "tool": "web_search", "complexity": "low"}}]}}
-
-User: Generate a picture of a cat.
-Output: {{"split": false, "prompts": [{{"prompt": "Generate a picture of a cat.", "tool": "image_generation", "complexity": "low"}}]}}
-
-User: Can you check if this URL is safe?
-Output: {{"split": false, "prompts": [{{"prompt": "Can you check if this URL is safe?", "tool": "logical_reasoning", "complexity": "low"}}]}}
-
-User: Summarize this document.
-Output: {{"split": false, "prompts": [{{"prompt": "Summarize this document.", "tool": "summarization", "complexity": "low"}}]}}
-
-User: I have a complex problem, I need a python script to download a webpage, parse its DOM, extract all the images, and then save them to my local disk.
-Output: {{"split": true, "prompts": [{{"prompt": "Write a python script to download a webpage", "tool": "code_generation", "complexity": "low"}}, {{"prompt": "Parse the DOM of the downloaded webpage", "tool": "dom_manipulation", "complexity": "low"}}, {{"prompt": "Extract all the images", "tool": "entity_extraction", "complexity": "low"}}, {{"prompt": "Save the images to my local disk", "tool": "terminal_execution", "complexity": "low"}}]}}
-
-User: Delete all files in the current folder.
-Output: {{"split": false, "prompts": [{{"prompt": "Delete all files in the current folder.", "tool": "terminal_execution", "complexity": "high"}}]}}
-
-User: Write an epic fantasy story about a wizard AND write Python code for a spell-casting simulator.
-Output: {{"split": true, "prompts": [{{"prompt": "Write an epic fantasy story about a wizard", "tool": "creative_writing", "complexity": "high"}}, {{"prompt": "Write Python code for a spell-casting simulator", "tool": "code_generation", "complexity": "high"}}]}}
-
-User: Write a short poem about the ocean and also write a JavaScript function to detect ocean tide patterns.
-Output: {{"split": true, "prompts": [{{"prompt": "Write a short poem about the ocean", "tool": "creative_writing", "complexity": "low"}}, {{"prompt": "Write a JavaScript function to detect ocean tide patterns", "tool": "code_generation", "complexity": "high"}}]}}
-
-User: Create a compelling product description for a smartwatch and write the REST API endpoint code to fetch its live data.
-Output: {{"split": true, "prompts": [{{"prompt": "Create a compelling product description for a smartwatch", "tool": "creative_writing", "complexity": "low"}}, {{"prompt": "Write the REST API endpoint code to fetch live smartwatch data", "tool": "code_generation", "complexity": "high"}}]}}
-
-User: Write a blog post about machine learning trends and then implement a neural network in Python from scratch.
-Output: {{"split": true, "prompts": [{{"prompt": "Write a blog post about machine learning trends", "tool": "creative_writing", "complexity": "high"}}, {{"prompt": "Implement a neural network in Python from scratch", "tool": "code_generation", "complexity": "high"}}]}}
-
-User: Tell me an engaging sci-fi story about AI and write the code for an AI chatbot using Python.
-Output: {{"split": true, "prompts": [{{"prompt": "Tell me an engaging sci-fi story about AI", "tool": "creative_writing", "complexity": "high"}}, {{"prompt": "Write the code for an AI chatbot using Python", "tool": "code_generation", "complexity": "high"}}]}}
-
-User: Write a haiku about autumn leaves and compute the Fibonacci sequence up to 1000.
-Output: {{"split": true, "prompts": [{{"prompt": "Write a haiku about autumn leaves", "tool": "creative_writing", "complexity": "low"}}, {{"prompt": "Compute the Fibonacci sequence up to 1000", "tool": "math_compute", "complexity": "low"}}]}}
-
-User: Analyze the sales data from Q3 and generate a chart-ready summary, then write a Python script to automate this report monthly.
-Output: {{"split": true, "prompts": [{{"prompt": "Analyze the sales data from Q3 and generate a chart-ready summary", "tool": "data_analysis", "complexity": "high"}}, {{"prompt": "Write a Python script to automate this monthly sales report", "tool": "code_generation", "complexity": "high"}}]}}
-
-User: Translate the following English paragraph to Spanish and then check if the translation is grammatically accurate.
-Output: {{"split": true, "prompts": [{{"prompt": "Translate the English paragraph to Spanish", "tool": "translation", "complexity": "low"}}, {{"prompt": "Check if the Spanish translation is grammatically accurate", "tool": "fact_check", "complexity": "low"}}]}}
-
-User: Search the web for the latest GPT-5 release notes and summarize what changed.
-Output: {{"split": true, "prompts": [{{"prompt": "Search the web for the latest GPT-5 release notes", "tool": "web_search", "complexity": "low"}}, {{"prompt": "Summarize the key changes in the GPT-5 release", "tool": "summarization", "complexity": "low"}}]}}
-
-User: Write a fantasy story about a dragon and compute the volume of a sphere with radius 7.
-Output: {{"split": true, "prompts": [{{"prompt": "Write a fantasy story about a dragon", "tool": "creative_writing", "complexity": "high"}}, {{"prompt": "Compute the volume of a sphere with radius 7", "tool": "math_compute", "complexity": "low"}}]}}
-
-User: Write a marketing email for our new product launch and implement the email sending backend in Python using SMTP.
-Output: {{"split": true, "prompts": [{{"prompt": "Write a marketing email for the new product launch", "tool": "creative_writing", "complexity": "low"}}, {{"prompt": "Implement an email sending backend in Python using SMTP", "tool": "code_generation", "complexity": "high"}}]}}
+User: "Translate this paragraph to French and check grammar."
+Output: {"split": true, "prompts": [{"prompt":"Translate the paragraph to French","tool":"translation","complexity":"low"},{"prompt":"Check grammar of the French translation","tool":"copy_editing","complexity":"low"}]}
 """
 
 
 class SLMTaskClient:
-    def __init__(self, api_url: str, timeout_ms: int = 15_000):
+    def __init__(
+        self,
+        api_url: str,
+        timeout_ms: int = 15_000,
+        model: str = "Qwen3.5-0.8B",
+        temperature: float = 0.1,
+        top_p: float = 0.8,
+        max_tokens: int = 1024,
+        enable_thinking: bool = False,
+    ):
         self._api_url = api_url
         self._timeout = timeout_ms / 1_000.0
+        self._model = model
+        self._temperature = temperature
+        self._top_p = top_p
+        self._max_tokens = max_tokens
+        self._enable_thinking = enable_thinking
 
     async def analyze(self, prompt: str, session_id: str) -> SLMTaskAnalysis:
-        # We try up to 2 times to get valid JSON
+        raw_text = ""
+        last_error: Optional[Exception] = None
+
         for attempt in range(2):
             try:
-                raw_json = await self._call_vllm(prompt)
-                # Clean up any potential markdown formatting the SLM might add
-                cleaned = raw_json.strip()
-                if cleaned.startswith("```json"):
-                    cleaned = cleaned[7:]
-                if cleaned.startswith("```"):
-                    cleaned = cleaned[3:]
-                if cleaned.endswith("```"):
-                    cleaned = cleaned[:-3]
-                
-                parsed = json.loads(cleaned.strip())
-                return SLMTaskAnalysis.model_validate(parsed)
-            except Exception as e:
-                logger.warning(f"Attempt {attempt + 1} failed to parse SLM task analysis: {e}. Raw: {raw_json if 'raw_json' in locals() else 'None'}")
-        
-        # Fallback to a safe single-task default
-        logger.error("Failed to parse SLM task analysis after 2 attempts. Falling back to default.")
+                raw_text = await self._call_chat_completions(
+                    prompt=prompt,
+                    session_id=session_id,
+                    repair_input=raw_text if attempt == 1 else None,
+                )
+                payload = self._parse_json_output(raw_text)
+                return SLMTaskAnalysis.model_validate(payload)
+            except Exception as exc:
+                last_error = exc
+                logger.warning(
+                    "SLM task parse attempt %s failed: %s | raw=%r",
+                    attempt + 1,
+                    exc,
+                    raw_text[:400],
+                )
+
+        logger.error("Failed to parse SLM task analysis after retries: %s", last_error)
+        # SLM-only strict policy: still return a schema-valid object, but mark as unsplit fallback.
         return SLMTaskAnalysis(
             split=False,
-            prompts=[{
-                "prompt": prompt,
-                "tool": "logical_reasoning",
-                "complexity": "high"
-            }]
+            prompts=[
+                {
+                    "prompt": prompt,
+                    "tool": "logical_reasoning",
+                    "complexity": "high",
+                }
+            ],
         )
 
-    async def _call_vllm(self, prompt: str) -> str:
-        body = {
-            "model": "Qwen3.5-0.8B",
-            "prompt": f"<|im_start|>system\n{SYSTEM_PROMPT}<|im_end|>\n<|im_start|>user\n{prompt}<|im_end|>\n<|im_start|>assistant\n",
-            "max_tokens": 1024,
-            "temperature": 0.1,
-            "stop": ["<|im_end|>"]
+    async def _call_chat_completions(
+        self, prompt: str, session_id: str, repair_input: Optional[str]
+    ) -> str:
+        user_text = prompt
+        if repair_input:
+            user_text = (
+                "Your previous response was invalid JSON for the required schema.\n"
+                "Return only corrected JSON with no extra text.\n"
+                "Previous output:\n{0}\n\nOriginal prompt:\n{1}"
+            ).format(repair_input, prompt)
+
+        body: Dict[str, Any] = {
+            "model": self._model,
+            "messages": [
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": user_text},
+            ],
+            "temperature": self._temperature,
+            "top_p": self._top_p,
+            "max_tokens": self._max_tokens,
+            "extra_body": {
+                "chat_template_kwargs": {"enable_thinking": self._enable_thinking}
+            },
         }
-        
+
         async with httpx.AsyncClient(timeout=self._timeout) as client:
-            resp = await client.post(self._api_url, json=body)
-            resp.raise_for_status()
-            data = resp.json()
-            return data["choices"][0]["text"]
+            response = await client.post(self._api_url, json=body)
+            response.raise_for_status()
+            data = response.json()
+        return self._extract_content_text(data)
+
+    @staticmethod
+    def _extract_content_text(data: Dict[str, Any]) -> str:
+        choices = data.get("choices")
+        if not isinstance(choices, list) or not choices:
+            raise ValueError("Missing choices in chat-completions response")
+        message = choices[0].get("message", {})
+        content = message.get("content")
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list):
+            parts = []
+            for chunk in content:
+                if isinstance(chunk, dict):
+                    text = chunk.get("text")
+                    if isinstance(text, str):
+                        parts.append(text)
+            if parts:
+                return "".join(parts)
+        raise ValueError("Missing message content in chat-completions response")
+
+    @staticmethod
+    def _parse_json_output(raw_text: str) -> Dict[str, Any]:
+        cleaned = raw_text.strip()
+        if cleaned.startswith("```json"):
+            cleaned = cleaned[7:]
+        if cleaned.startswith("```"):
+            cleaned = cleaned[3:]
+        if cleaned.endswith("```"):
+            cleaned = cleaned[:-3]
+        return json.loads(cleaned.strip())

@@ -83,6 +83,11 @@ def create_app(router_service: Optional[RouterService] = None) -> FastAPI:
     app.state.slm_task_client = SLMTaskClient(
         api_url=settings.slm_task_api_url,
         timeout_ms=settings.slm_task_timeout_ms,
+        model=settings.slm_task_model,
+        temperature=settings.slm_task_temperature,
+        top_p=settings.slm_task_top_p,
+        max_tokens=settings.slm_task_max_tokens,
+        enable_thinking=settings.slm_task_enable_thinking,
     )
 
     @app.get("/health")
