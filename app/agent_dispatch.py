@@ -41,7 +41,7 @@ def resolve_model_for_task(tool: str, complexity: str) -> str:
         
     # Group 3: Math, Logic, & Data
     if tool in REASONING_GROUP:
-        return "gpt-5.4-thinking" if complexity == "high" else "claude-sonnet-4.6"
+        return "gpt-5.4" if complexity == "high" else "claude-sonnet-4.6"
         
     # Group 4: Vision & Audio Processing
     if tool in MULTIMODAL_GROUP:

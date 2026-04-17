@@ -14,11 +14,11 @@ try:
 
     scp = SCPClient(client.get_transport())
     
-    # Sync agent_dispatch.py
-    scp.put("app/agent_dispatch.py", remote_path="~/star-router/app/agent_dispatch.py")
+    # Sync entire app directory
+    scp.put("app", remote_path="~/star-router/", recursive=True)
     
-    # Restart the server
-    stdin, stdout, stderr = client.exec_command("cd star-router && if [ -f router.pid ]; then kill $(cat router.pid); rm router.pid; fi")
+    # Restart the server securely loading .env
+    stdin, stdout, stderr = client.exec_command("cd star-router && pkill -f 'uvicorn app.main:app' || true")
     stdout.channel.recv_exit_status()
     
     # Install new dependencies explicitly
