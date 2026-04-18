@@ -118,6 +118,27 @@ def get_ui_html() -> str:
       background: transparent;
       font-size: 13px;
     }
+    #taskStack {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .task-card {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: #101010;
+      padding: 10px;
+    }
+    .task-title {
+      font-size: 13px;
+      color: #cfcfcf;
+      margin-bottom: 8px;
+    }
+    .task-status {
+      color: var(--muted);
+      font-size: 12px;
+      margin-left: 8px;
+    }
     .hidden { display: none; }
     .status-ok { color: var(--ok); }
     .status-err { color: var(--err); }
@@ -140,10 +161,12 @@ def get_ui_html() -> str:
       <section class="panel">
         <h3>Streaming Output</h3>
         <pre id="outputRaw"></pre>
-        <div id="outputRendered" class="rendered hidden"></div>
+        <div id="outputRendered" class="rendered hidden">
+          <div id="taskStack"></div>
+        </div>
       </section>
       <section class="panel">
-        <h3>Metadata (30%)</h3>
+        <h3>Metadata</h3>
         <pre id="meta"></pre>
       </section>
     </div>
@@ -154,6 +177,7 @@ def get_ui_html() -> str:
   <script>
     const outputRaw = document.getElementById("outputRaw");
     const outputRendered = document.getElementById("outputRendered");
+    const taskStack = document.getElementById("taskStack");
     const meta = document.getElementById("meta");
     const runBtn = document.getElementById("runBtn");
     const promptEl = document.getElementById("prompt");
@@ -168,93 +192,82 @@ def get_ui_html() -> str:
       meta.textContent = JSON.stringify(state, null, 2);
     }
 
-    function toMarkdown(rawText) {
-      const lines = rawText.split("\\n");
-      const transformed = [];
-      for (const line of lines) {
-        const header = line.match(/^\\[STAR\\] request_id=(\\S+) session=(\\S+)/);
-        if (header) {
-          transformed.push("### Request");
-          transformed.push("- request_id: `" + header[1] + "`");
-          transformed.push("- session_id: `" + header[2] + "`");
-          continue;
-        }
-        const analyze = line.match(/^\\[STAR\\] Analyzing prompt\\.\\.\\.$/);
-        if (analyze) {
-          transformed.push("> Analyzing prompt...");
-          continue;
-        }
-        const split = line.match(/^\\[STAR\\] split → (\\d+) task\\(s\\) dispatched concurrently$/);
-        if (split) {
-          transformed.push("### Routing");
-          transformed.push("- split: `true`");
-          transformed.push("- task_count: `" + split[1] + "`");
-          continue;
-        }
-        const single = line.match(/^\\[STAR\\] single task → (\\d+) task\\(s\\) dispatched concurrently$/);
-        if (single) {
-          transformed.push("### Routing");
-          transformed.push("- split: `false`");
-          transformed.push("- task_count: `" + single[1] + "`");
-          continue;
-        }
-        const task = line.match(/^--- Task (\\d+): (.+) \\(via (.+)\\) ---$/);
-        if (task) {
-          transformed.push("");
-          transformed.push("## Task " + task[1] + ": " + task[2]);
-          transformed.push("_Model: `" + task[3] + "`_");
-          transformed.push("");
-          continue;
-        }
-        const done = line.match(/^\\[STAR\\] Done\\. (\\d+) task\\(s\\) completed\\.$/);
-        if (done) {
-          transformed.push("");
-          transformed.push("---");
-          transformed.push("**Done. " + done[1] + " task(s) completed.**");
-          continue;
-        }
-        transformed.push(line);
-      }
-      return transformed.join("\\n");
+    function finalizeActiveTask(state, nowMs) {
+      if (!state.active_task || state.active_task.done) return;
+      state.active_task.done = true;
+      state.active_task.inference_ms = nowMs - state.active_task.started_at_ms;
+      state.timing_ms.model_inference_ms[String(state.active_task.index)] = state.active_task.inference_ms;
     }
 
-    function renderFinalOutput(rawText) {
-      const markdown = toMarkdown(rawText);
-      const html = marked.parse(markdown, {
-        breaks: true,
-        gfm: true,
-      });
-      outputRendered.innerHTML = html;
-      outputRendered.querySelectorAll("pre code").forEach((block) => {
-        hljs.highlightElement(block);
-      });
-      outputRaw.classList.add("hidden");
-      outputRendered.classList.remove("hidden");
+    function renderTaskStack(state) {
+      const blocks = [];
+      for (const task of state.stack) {
+        const status = task.done ? "done" : "running";
+        const duration = task.inference_ms != null ? (" (" + task.inference_ms + " ms)") : "";
+        const body = marked.parse(task.output || "", { breaks: true, gfm: true });
+        blocks.push(
+          "<article class='task-card'>" +
+            "<div class='task-title'>Task " + task.index + ": " + task.tool +
+              "<span class='task-status'>[" + task.model + " | " + status + duration + "]</span></div>" +
+            "<div>" + body + "</div>" +
+          "</article>"
+        );
+      }
+      taskStack.innerHTML = blocks.join("");
+      taskStack.querySelectorAll("pre code").forEach((block) => hljs.highlightElement(block));
     }
 
     function parseLine(line, state) {
+      const now = Date.now();
       const header = line.match(/\\[STAR\\] request_id=([^\\s]+) session=([^\\s]+)/);
       if (header) {
         state.request_id = header[1];
         state.session_id = header[2];
+        return;
       }
       const split = line.match(/\\[STAR\\] split → (\\d+) task\\(s\\)/);
       if (split) {
         state.split = true;
         state.task_count = Number(split[1]);
+        if (state.timing_ms.slm_inference_ms == null) {
+          state.timing_ms.slm_inference_ms = now - state.started_at_ms;
+        }
+        return;
       }
       const single = line.match(/\\[STAR\\] single task → (\\d+) task\\(s\\)/);
       if (single) {
         state.split = false;
         state.task_count = Number(single[1]);
+        if (state.timing_ms.slm_inference_ms == null) {
+          state.timing_ms.slm_inference_ms = now - state.started_at_ms;
+        }
+        return;
       }
       const task = line.match(/--- Task (\\d+): (.+) \\(via (.+)\\) ---/);
       if (task) {
-        state.tasks.push({ index: Number(task[1]), tool: task[2], model: task[3] });
+        finalizeActiveTask(state, now);
+        const card = {
+          index: Number(task[1]),
+          tool: task[2],
+          model: task[3],
+          output: "",
+          done: false,
+          started_at_ms: now,
+          inference_ms: null,
+        };
+        state.stack.unshift(card); // FILO stack: latest at top
+        state.active_task = card;
+        state.tasks.push({ index: card.index, tool: card.tool, model: card.model });
+        return;
       }
       const done = line.match(/\\[STAR\\] Done\\. (\\d+) task\\(s\\) completed\\./);
       if (done) {
         state.tasks_completed = Number(done[1]);
+        finalizeActiveTask(state, now);
+        return;
+      }
+      if (state.active_task) {
+        state.active_task.output += (state.active_task.output ? "\\n" : "") + line;
       }
     }
 
@@ -267,18 +280,26 @@ def get_ui_html() -> str:
       const state = {
         endpoint: "/v1/clean",
         started_at: new Date().toISOString(),
+        started_at_ms: Date.now(),
         request_id,
         session_id,
         split: null,
         task_count: 0,
         tasks_completed: 0,
         tasks: [],
+        stack: [],
+        active_task: null,
+        timing_ms: {
+          slm_inference_ms: null,
+          model_inference_ms: {},
+          total_ms: null
+        },
         status: "running"
       };
       outputRaw.textContent = "";
       outputRaw.classList.remove("hidden");
       outputRendered.classList.add("hidden");
-      outputRendered.innerHTML = "";
+      taskStack.innerHTML = "";
       renderMeta(state);
       runBtn.disabled = true;
       runBtn.textContent = "Running...";
@@ -295,26 +316,29 @@ def get_ui_html() -> str:
         const reader = resp.body.getReader();
         const decoder = new TextDecoder();
         let buffered = "";
-        let fullText = "";
         while (true) {
           const { value, done } = await reader.read();
           if (done) break;
           const chunk = decoder.decode(value, { stream: true });
-          fullText += chunk;
           outputRaw.textContent += chunk;
           outputRaw.scrollTop = outputRaw.scrollHeight;
           buffered += chunk;
           const lines = buffered.split("\\n");
           buffered = lines.pop() || "";
           for (const line of lines) parseLine(line, state);
+          renderTaskStack(state);
           renderMeta(state);
         }
         if (buffered) parseLine(buffered, state);
-        renderFinalOutput(fullText);
+        renderTaskStack(state);
+        outputRaw.classList.add("hidden");
+        outputRendered.classList.remove("hidden");
+        state.timing_ms.total_ms = Date.now() - state.started_at_ms;
         state.status = "success";
       } catch (err) {
         state.status = "error";
         state.error = String(err);
+        state.timing_ms.total_ms = Date.now() - state.started_at_ms;
       } finally {
         state.finished_at = new Date().toISOString();
         renderMeta(state);
