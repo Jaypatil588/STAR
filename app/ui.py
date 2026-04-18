@@ -292,7 +292,7 @@ def get_ui_html() -> str:
 
       const request_id = uid();
       const state = {
-        endpoint: "/v1/clean",
+        endpoint: "/v1/star",
         started_at: new Date().toISOString(),
         started_at_ms: Date.now(),
         request_id,
@@ -319,31 +319,24 @@ def get_ui_html() -> str:
       runBtn.textContent = "Running...";
 
       try {
-        const resp = await fetch("/v1/clean", {
+        const resp = await fetch("/v1/star", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ request_id, session_id, prompt })
+          body: JSON.stringify({ request_id, session_id, prompt, context: {} })
         });
-        if (!resp.ok || !resp.body) {
+        if (!resp.ok) {
           throw new Error("HTTP " + resp.status);
         }
-        const reader = resp.body.getReader();
-        const decoder = new TextDecoder();
-        let buffered = "";
-        while (true) {
-          const { value, done } = await reader.read();
-          if (done) break;
-          const chunk = decoder.decode(value, { stream: true });
-          outputRaw.textContent += chunk;
-          outputRaw.scrollTop = outputRaw.scrollHeight;
-          buffered += chunk;
-          const lines = buffered.split("\\n");
-          buffered = lines.pop() || "";
-          for (const line of lines) parseLine(line, state);
-          renderTaskStack(state);
-          renderMeta(state);
-        }
-        if (buffered) parseLine(buffered, state);
+        const payload = await resp.json();
+        if (payload.request_id) state.request_id = payload.request_id;
+        const finalResponse = payload.final_response || {};
+        const outputText = (finalResponse && finalResponse.output) ? String(finalResponse.output) : "";
+
+        outputRaw.textContent = outputText || JSON.stringify(payload, null, 2);
+        outputRaw.scrollTop = outputRaw.scrollHeight;
+
+        const lines = outputRaw.textContent.split("\\n");
+        for (const line of lines) parseLine(line, state);
         renderTaskStack(state);
         outputRaw.classList.add("hidden");
         outputRendered.classList.remove("hidden");
