@@ -203,12 +203,14 @@ def get_ui_html() -> str:
       const blocks = [];
       for (const task of state.stack) {
         const status = task.done ? "done" : "running";
-        const duration = task.inference_ms != null ? (" (" + task.inference_ms + " ms)") : "";
+        const duration = task.inference_ms != null
+          ? (task.done ? (" completed in " + task.inference_ms + " ms") : (" elapsed " + task.inference_ms + " ms"))
+          : "";
         const body = marked.parse(task.output || "", { breaks: true, gfm: true });
         blocks.push(
           "<article class='task-card'>" +
             "<div class='task-title'>Task " + task.index + ": " + task.tool +
-              "<span class='task-status'>[" + task.model + " | " + status + duration + "]</span></div>" +
+              "<span class='task-status'>[" + task.model + " | " + status + "]" + duration + "</span></div>" +
             "<div>" + body + "</div>" +
           "</article>"
         );
