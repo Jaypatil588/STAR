@@ -67,3 +67,33 @@ python3 scripts/eval_split.py \
   --temperature 0.1 \
   --top-p 0.8
 ```
+
+## Validation Run (Documented)
+
+Prompt tested through full chain (`/v1/star`):
+
+```json
+{
+  "session_id": "doc-run-1",
+  "prompt": "write a creative story and make code game for it"
+}
+```
+
+Observed behavior from live GPU endpoint (`http://192.168.50.218:8080/v1/star`):
+- Route chain executed: `/v1/star -> /v1/pil-clean -> /v1/clean`
+- SLM split decision: `split -> 2 task(s)`
+- Task 1 routed to `gpt-4o` (creative writing output returned)
+- Task 2 routed to `claude-opus-4-7` (code generation output returned)
+- Timing lines present in `final_response.output`:
+  - `slm_inference_ms=3412.488`
+  - `task_index=1 model_inference_ms=9193.853`
+  - `task_index=2 model_inference_ms=10906.005`
+  - `total_ms=14342.954`
+
+Reproduce with:
+
+```bash
+curl -sS -X POST http://192.168.50.218:8080/v1/star \
+  -H 'Content-Type: application/json' \
+  -d '{"session_id":"doc-run-1","prompt":"write a creative story and make code game for it"}'
+```
