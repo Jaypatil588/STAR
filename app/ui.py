@@ -188,6 +188,10 @@ def get_ui_html() -> str:
       return "req-" + Date.now();
     }
 
+    function ms3(value) {
+      return Number(Number(value).toFixed(3));
+    }
+
     function renderMeta(state) {
       const stackSummary = (state.stack || []).map((task) => ({
         index: task.index,
@@ -207,7 +211,7 @@ def get_ui_html() -> str:
     function finalizeActiveTask(state, nowMs) {
       if (!state.active_task || state.active_task.done) return;
       state.active_task.done = true;
-      state.active_task.inference_ms = nowMs - state.active_task.started_at_ms;
+      state.active_task.inference_ms = ms3(nowMs - state.active_task.started_at_ms);
       state.timing_ms.model_inference_ms[String(state.active_task.index)] = state.active_task.inference_ms;
     }
 
@@ -216,7 +220,7 @@ def get_ui_html() -> str:
       for (const task of state.stack) {
         const status = task.done ? "done" : "running";
         const duration = task.inference_ms != null
-          ? (task.done ? (" completed in " + task.inference_ms + " ms") : (" elapsed " + task.inference_ms + " ms"))
+          ? (task.done ? (" completed in " + ms3(task.inference_ms) + " ms") : (" elapsed " + ms3(task.inference_ms) + " ms"))
           : "";
         const body = marked.parse(task.output || "", { breaks: true, gfm: true });
         blocks.push(
@@ -232,29 +236,45 @@ def get_ui_html() -> str:
     }
 
     function parseLine(line, state) {
-      const now = Date.now();
+      const now = performance.now();
       const header = line.match(/\\[STAR\\] request_id=([^\\s]+) session=([^\\s]+)/);
       if (header) {
         state.request_id = header[1];
         state.session_id = header[2];
         return;
       }
+      const timingSlm = line.match(/^\\[TIMING\\]\\s+slm_inference_ms=([0-9.]+)$/);
+      if (timingSlm) {
+        state.timing_ms.slm_inference_ms = ms3(parseFloat(timingSlm[1]));
+        return;
+      }
+      const timingTask = line.match(/^\\[TIMING\\]\\s+task_index=(\\d+)\\s+model_inference_ms=([0-9.]+)$/);
+      if (timingTask) {
+        const taskIndex = Number(timingTask[1]);
+        const taskMs = ms3(parseFloat(timingTask[2]));
+        state.timing_ms.model_inference_ms[String(taskIndex)] = taskMs;
+        const card = state.stack.find((t) => t.index === taskIndex);
+        if (card) {
+          card.inference_ms = taskMs;
+          card.done = true;
+        }
+        return;
+      }
+      const timingTotal = line.match(/^\\[TIMING\\]\\s+total_ms=([0-9.]+)$/);
+      if (timingTotal) {
+        state.timing_ms.total_ms = ms3(parseFloat(timingTotal[1]));
+        return;
+      }
       const split = line.match(/\\[STAR\\] split → (\\d+) task\\(s\\)/);
       if (split) {
         state.split = true;
         state.task_count = Number(split[1]);
-        if (state.timing_ms.slm_inference_ms == null) {
-          state.timing_ms.slm_inference_ms = now - state.started_at_ms;
-        }
         return;
       }
       const single = line.match(/\\[STAR\\] single task → (\\d+) task\\(s\\)/);
       if (single) {
         state.split = false;
         state.task_count = Number(single[1]);
-        if (state.timing_ms.slm_inference_ms == null) {
-          state.timing_ms.slm_inference_ms = now - state.started_at_ms;
-        }
         return;
       }
       const task = line.match(/--- Task (\\d+): (.+) \\(via (.+)\\) ---/);
@@ -294,7 +314,7 @@ def get_ui_html() -> str:
       const state = {
         endpoint: "/v1/star",
         started_at: new Date().toISOString(),
-        started_at_ms: Date.now(),
+        started_at_ms: performance.now(),
         request_id,
         session_id,
         split: null,
@@ -340,12 +360,14 @@ def get_ui_html() -> str:
         renderTaskStack(state);
         outputRaw.classList.add("hidden");
         outputRendered.classList.remove("hidden");
-        state.timing_ms.total_ms = Date.now() - state.started_at_ms;
+        if (state.timing_ms.total_ms == null) {
+          state.timing_ms.total_ms = ms3(performance.now() - state.started_at_ms);
+        }
         state.status = "success";
       } catch (err) {
         state.status = "error";
         state.error = String(err);
-        state.timing_ms.total_ms = Date.now() - state.started_at_ms;
+        state.timing_ms.total_ms = ms3(performance.now() - state.started_at_ms);
       } finally {
         state.finished_at = new Date().toISOString();
         renderMeta(state);

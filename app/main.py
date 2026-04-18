@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import time
 from typing import Any, AsyncGenerator, Dict, Optional
 from uuid import uuid4
 
@@ -104,15 +105,19 @@ def create_app(router_service: Optional[RouterService] = None) -> FastAPI:
         request_id = request.request_id or str(uuid4())
 
         async def stream() -> AsyncGenerator[str, None]:
+            total_started = time.perf_counter()
             # Header line
             yield f"[STAR] request_id={request_id} session={request.session_id}\n"
             yield f"[STAR] Analyzing prompt...\n"
 
             try:
+                slm_started = time.perf_counter()
                 task_analysis = await app.state.slm_task_client.analyze(
                     prompt=request.prompt,
                     session_id=request.session_id,
                 )
+                slm_inference_ms = round((time.perf_counter() - slm_started) * 1000.0, 3)
+                yield f"[TIMING] slm_inference_ms={slm_inference_ms:.3f}\n"
             except Exception as exc:
                 yield f"[ERROR] SLM analysis failed: {exc}\n"
                 return
@@ -132,8 +137,15 @@ def create_app(router_service: Optional[RouterService] = None) -> FastAPI:
                 yield f"--- Task {task_idx}: {tool} (via {model}) ---\n"
                 yield output
                 yield "\n\n"
+                task_inference_ms = float(result.get("inference_ms", 0.0))
+                yield (
+                    f"[TIMING] task_index={task_idx} model_inference_ms="
+                    f"{task_inference_ms:.3f}\n"
+                )
 
             yield f"[STAR] Done. {task_idx} task(s) completed.\n"
+            total_ms = round((time.perf_counter() - total_started) * 1000.0, 3)
+            yield f"[TIMING] total_ms={total_ms:.3f}\n"
 
         return StreamingResponse(stream(), media_type="text/plain")
 

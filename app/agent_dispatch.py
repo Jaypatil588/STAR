@@ -1,4 +1,5 @@
 import asyncio
+import time
 from openai import AsyncOpenAI
 from anthropic import AsyncAnthropic
 from typing import Any, Dict
@@ -119,13 +120,14 @@ async def _call_anthropic(model: str, prompt: str) -> str:
 async def _execute_task(task: Dict[str, Any]) -> Dict[str, Any]:
     model = task["assigned_model"]
     prompt = task["prompt"]
-    
+    started = time.perf_counter()
     if "claude" in model.lower():
         output = await _call_anthropic(model, prompt)
     else:
         output = await _call_openai(model, prompt)
-        
+    elapsed_ms = round((time.perf_counter() - started) * 1000.0, 3)
     task["output"] = output
+    task["inference_ms"] = elapsed_ms
     task["status"] = "completed"
     return task
 
