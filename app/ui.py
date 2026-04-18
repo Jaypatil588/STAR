@@ -317,6 +317,14 @@ def get_ui_html() -> str:
         started_at_ms: performance.now(),
         request_id,
         session_id,
+        stage_prompts: {
+          star_input: prompt,
+          pil_original: null,
+          pil_normalized: null,
+          pil_masked: null,
+          clean_input: null,
+          masking_applied: null
+        },
         split: null,
         task_count: 0,
         tasks_completed: 0,
@@ -349,6 +357,12 @@ def get_ui_html() -> str:
         }
         const payload = await resp.json();
         if (payload.request_id) state.request_id = payload.request_id;
+        const pil = payload.pil_clean_response || {};
+        state.stage_prompts.pil_original = pil.original_prompt ?? null;
+        state.stage_prompts.pil_normalized = pil.normalized_prompt ?? null;
+        state.stage_prompts.pil_masked = pil.masked_prompt ?? null;
+        state.stage_prompts.clean_input = pil.masked_prompt ?? pil.cleaned_prompt ?? null;
+        state.stage_prompts.masking_applied = pil.masking_applied ?? null;
         const finalResponse = payload.final_response || {};
         const outputText = (finalResponse && finalResponse.output) ? String(finalResponse.output) : "";
 

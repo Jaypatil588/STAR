@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import time
 from typing import Any, AsyncGenerator, Dict, Optional
 from uuid import uuid4
@@ -153,16 +154,17 @@ def create_app(router_service: Optional[RouterService] = None) -> FastAPI:
     @app.post("/v1/pil-clean")
     async def pil_clean(request: PILCleanRequest) -> dict:
         request_id = request.request_id or str(uuid4())
-        cleaned_prompt = _pil_clean_text(request.prompt)
+        normalized_prompt = _pil_clean_text(request.prompt)
+        masked_prompt = _pil_mask_text(normalized_prompt)
         fixed_response = {
             "stage": "pil_clean",
-            "decision": "clean_prompt_and_forward",
+            "decision": "mask_and_forward",
             "next_endpoint": "/v1/clean",
         }
         clean_payload = {
             "request_id": request_id,
             "session_id": request.session_id,
-            "prompt": cleaned_prompt,
+            "prompt": masked_prompt,
         }
         try:
             clean_response = await app.state.endpoint_caller.post("/v1/clean", clean_payload)
@@ -174,7 +176,11 @@ def create_app(router_service: Optional[RouterService] = None) -> FastAPI:
             "request_id": request_id,
             "session_id": request.session_id,
             "original_prompt": request.prompt,
-            "cleaned_prompt": cleaned_prompt,
+            "normalized_prompt": normalized_prompt,
+            "masked_prompt": masked_prompt,
+            # Backward-compat key used in earlier responses.
+            "cleaned_prompt": masked_prompt,
+            "masking_applied": masked_prompt != normalized_prompt,
             "fixed_response": fixed_response,
             "clean_response": clean_response,
             "final_response": _extract_final_response(clean_response),
@@ -340,6 +346,25 @@ def _context_to_summary(context: Optional[Dict[str, Any]]) -> str:
 def _pil_clean_text(prompt: str) -> str:
     cleaned = " ".join(prompt.strip().split())
     return cleaned
+
+
+def _pil_mask_text(prompt: str) -> str:
+    masked = prompt
+    # OpenAI / Anthropic style keys and generic long secret tokens.
+    masked = re.sub(r"\bsk-[A-Za-z0-9_-]{20,}\b", "[MASKED_API_KEY]", masked)
+    # Email addresses.
+    masked = re.sub(
+        r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b",
+        "[MASKED_EMAIL]",
+        masked,
+    )
+    # Common phone formats.
+    masked = re.sub(
+        r"\b(?:\+?\d{1,3}[-.\s]?)?(?:\(?\d{3}\)?[-.\s]?)\d{3}[-.\s]?\d{4}\b",
+        "[MASKED_PHONE]",
+        masked,
+    )
+    return masked
 
 
 def _extract_final_response(payload: Optional[Dict[str, Any]]) -> Any:
