@@ -189,7 +189,19 @@ def get_ui_html() -> str:
     }
 
     function renderMeta(state) {
-      meta.textContent = JSON.stringify(state, null, 2);
+      const stackSummary = (state.stack || []).map((task) => ({
+        index: task.index,
+        tool: task.tool,
+        model: task.model,
+        done: task.done,
+        inference_ms: task.inference_ms,
+        output_chars: (task.output || "").length
+      }));
+      const safeState = {
+        ...state,
+        stack: stackSummary
+      };
+      meta.textContent = JSON.stringify(safeState, null, 2);
     }
 
     function finalizeActiveTask(state, nowMs) {
